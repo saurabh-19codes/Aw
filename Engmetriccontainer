@@ -1,115 +1,532 @@
 import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { Provider } from 'react-redux';
 import configureStore from 'redux-mock-store';
-import { fromJS } from 'immutable';
-import { render, fireEvent, screen } from '@testing-library/react';
-import EngineeringProductivityMetricsContainer from './EngineeringProductivityMetricsContainer';
-import * as redux from 'react-redux';
+import EngineeringProductivityMetricsContainer from '../EngineeringProductivityMetricsContainer';
+import {
+  SET_URL,
+  GET_URL,
+  SET_SHOW_FEEDBACK,
+  SET_SHOW_API_DOWNLOAD_ERROR,
+  SET_SHOW_FEEDBACK_DOWNLOAD_SUCCESS_MSG
+} from '../reducers'; // Adjust path as needed
 
-// Mock all deeply imported children for isolation
-jest.mock('../components/AxpDoraMetricsGrid', () => () => <div data-testid="AxpDoraMetricsGrid" />);
-jest.mock('../components/AxpEngineeringMetricsGrid', () => () => <div data-testid="AxpEngineeringMetricsGrid" />);
-jest.mock('../components/AxpNfrMetricsGridWithFiltersWithE', () => () => <div data-testid="AxpNfrMetricsGridWithFiltersWithE" />);
-jest.mock('../components/AxpEngineeringMetricsGridWithFiltersTest', () => () => <div data-testid="AxpEngineeringMetricsGridWithFiltersTest" />);
-jest.mock('../components/PageLevelMessage', () => ({ children, ...props }) =>
-  <div data-testid="PageLevelMessage" {...props}>{children}</div>
-);
+// Mock child components
+jest.mock('../components/AxpEngineeringMetricsGrid', () => ({ 
+  handleEnterpriseTimestampUpdate, 
+  setMonthlyToggle,
+  monthlyToggle 
+}) => (
+  <div data-testid="AxpEngineeringMetricsGrid">
+    <button onClick={() => handleEnterpriseTimestampUpdate('2025-01-01')}>
+      Update Enterprise Timestamp
+    </button>
+    <span data-testid="monthly-toggle-state">{monthlyToggle.toString()}</span>
+  </div>
+));
+
+jest.mock('../components/AxpDoraMetricsGrid', () => ({ 
+  handleDora, 
+  setLastUpdatedDora,
+  monthlyToggle 
+}) => (
+  <div data-testid="AxpDoraMetricsGrid">
+    <button onClick={() => handleDora('2025-01-01')}>
+      Update DORA Timestamp
+    </button>
+    <span data-testid="dora-monthly-toggle">{monthlyToggle.toString()}</span>
+  </div>
+));
+
+jest.mock('../components/AxpNfrMetricsGridWithFiltersWithE', () => ({ 
+  handleNfrLastUpdated,
+  monthlyToggle 
+}) => (
+  <div data-testid="AxpNfrMetricsGridWithFiltersWithE">
+    <button onClick={() => handleNfrLastUpdated('2025-01-01')}>
+      Update NFR Timestamp
+    </button>
+    <span data-testid="nfr-monthly-toggle">{monthlyToggle.toString()}</span>
+  </div>
+));
+
+jest.mock('../components/AxpEngineeringMetricsGridWithFiltersTest', () => ({ 
+  lastUpdatedDate,
+  monthlyToggle 
+}) => (
+  <div data-testid="AxpEngineeringMetricsGridWithFiltersTest">
+    <span data-testid="filtered-last-updated">{lastUpdatedDate}</span>
+    <span data-testid="filtered-monthly-toggle">{monthlyToggle.toString()}</span>
+  </div>
+));
+
+jest.mock('../components/LastUpdatedComponent', () => ({ lastUpdatedDate }) => (
+  <div data-testid="LastUpdatedComponent">
+    Last Updated: {lastUpdatedDate || 'Not set'}
+  </div>
+));
+
+jest.mock('../components/PageLevelMessage', () => ({ 
+  id, 
+  type, 
+  children, 
+  onDismiss 
+}) => (
+  <div 
+    data-testid="PageLevelMessage" 
+    data-type={type}
+    data-id={id}
+  >
+    {children}
+    {onDismiss && (
+      <button data-testid="dismiss-message" onClick={onDismiss}>
+        Dismiss
+      </button>
+    )}
+  </div>
+));
+
+// Mock urlRedux utility
+const mockUrlRedux = {
+  getInt: jest.fn()
+};
+
+jest.mock('../utils/urlRedux', () => mockUrlRedux); // Adjust path as needed
 
 const mockStore = configureStore([]);
-let store, dispatchMock;
-
-beforeEach(() => {
-  dispatchMock = jest.fn();
-  jest.spyOn(redux, 'useDispatch').mockReturnValue(dispatchMock);
-});
-
-const baseState = fromJS({
-  amexway: {
-    url: '',
-    feedback: {
-      showFeedbackMessage: false,
-    },
-    downloadFeedback: {
-      showApiErrorMessage: false,
-      showSuccessMessage: false,
-    },
-  },
-});
-
-function renderWithStore(stateOverrides = {}) {
-  store = mockStore(baseState.mergeDeep(fromJS(stateOverrides)));
-  return render(
-    <Provider store={store}>
-      <EngineeringProductivityMetricsContainer />
-    </Provider>
-  );
-}
 
 describe('EngineeringProductivityMetricsContainer', () => {
-  it('renders all tabs', () => {
-    renderWithStore();
-    expect(screen.getByText(/Enterprise Productivity Signals/i)).toBeInTheDocument();
-    expect(screen.getByText(/DORA Metrics/i)).toBeInTheDocument();
-    expect(screen.getByText(/NFR Metrics/i)).toBeInTheDocument();
+  let store;
+  let mockDispatch;
+
+  const initialReduxState = {
+    amexway: {
+      url: '',
+      feedback: {
+        showFeedbackMessage: false,
+      },
+      downloadFeedback: {
+        showApiErrorMessage: false,
+        showSuccessMessage: false,
+      }
+    }
+  };
+
+  beforeEach(() => {
+    store = mockStore(initialReduxState);
+    mockDispatch = jest.fn();
+    store.dispatch = mockDispatch;
+    jest.clearAllMocks();
   });
 
-  it('renders default Enterprise tab content (grid, filter tab)', () => {
-    renderWithStore();
-    expect(screen.getByText(/Enterprise View/i)).toBeInTheDocument();
-    expect(screen.getByTestId('AxpEngineeringMetricsGrid')).toBeInTheDocument();
-  });
+  describe('Initial Render', () => {
+    it('renders all tab headers correctly', () => {
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
 
-  it('renders DORA Metrics tab on click', () => {
-    renderWithStore();
-    fireEvent.click(screen.getByText(/DORA Metrics/i));
-    expect(screen.getByTestId('AxpDoraMetricsGrid')).toBeInTheDocument();
-  });
-
-  it('renders NFR Metrics tab on click', () => {
-    renderWithStore();
-    fireEvent.click(screen.getByText(/NFR Metrics/i));
-    expect(screen.getByTestId('AxpNfrMetricsGridWithFiltersWithE')).toBeInTheDocument();
-  });
-
-  it('shows feedback success message if showFeedbackMessage true', () => {
-    renderWithStore({
-      amexway: { feedback: { showFeedbackMessage: true } }
+      expect(screen.getByText('Enterprise Productivity Signals')).toBeInTheDocument();
+      expect(screen.getByText('DORA Metrics')).toBeInTheDocument();
+      expect(screen.getByText('NFR Metrics')).toBeInTheDocument();
     });
-    expect(screen.getAllByTestId('PageLevelMessage').some(m => m.textContent.includes('Feedback successfully submitted.'))).toBe(true);
-  });
 
-  it('shows download success message if showSuccessMessage true', () => {
-    renderWithStore({
-      amexway: { downloadFeedback: { showSuccessMessage: true } }
+    it('renders Enterprise View as default active tab', () => {
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      expect(screen.getByText('Enterprise View - Engineering Productivity Signals')).toBeInTheDocument();
+      expect(screen.getByTestId('AxpEngineeringMetricsGrid')).toBeInTheDocument();
+      expect(screen.getByText('Filtered View - Non-functional Requirements Metrics')).toBeInTheDocument();
+      expect(screen.getByTestId('AxpEngineeringMetricsGridWithFiltersTest')).toBeInTheDocument();
     });
-    expect(screen.getAllByTestId('PageLevelMessage').some(m => m.textContent.includes('Feedback downloaded successfully.'))).toBe(true);
-  });
 
-  it('shows download API error if showApiErrorMessage true', () => {
-    renderWithStore({
-      amexway: { downloadFeedback: { showApiErrorMessage: true } }
+    it('renders info links with correct href attributes', () => {
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      const infoLinks = screen.getAllByText('Info Link');
+      expect(infoLinks).toHaveLength(2); // Two info links in enterprise view
+      
+      infoLinks.forEach(link => {
+        expect(link.closest('a')).toHaveAttribute('href', expect.stringContaining('enterprise-confluence.aexp.com'));
+        expect(link.closest('a')).toHaveAttribute('target', '_blank');
+        expect(link.closest('a')).toHaveAttribute('rel', 'noreferrer');
+      });
     });
-    expect(screen.getAllByTestId('PageLevelMessage').some(m => m.textContent.includes('Something went wrong'))).toBe(true);
-  });
 
-  it('dispatches to hide feedback message when feedback success dismissed', () => {
-    renderWithStore({
-      amexway: { feedback: { showFeedbackMessage: true } }
+    it('initializes monthly toggle state correctly', () => {
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      expect(screen.getByTestId('monthly-toggle-state')).toHaveTextContent('false');
     });
-    fireEvent.click(screen.getAllByTestId('PageLevelMessage').find(m => m.textContent.includes('Feedback successfully submitted.')));
-    expect(dispatchMock).toHaveBeenCalledWith({
-      type: 'SET_SHOW_FEEDBACK', payload: false,
+  });
+
+  describe('Tab Navigation', () => {
+    it('switches to DORA Metrics tab when clicked', () => {
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      fireEvent.click(screen.getByText('DORA Metrics'));
+
+      expect(screen.getByText('DORA Metrics')).toBeInTheDocument(); // H1 title
+      expect(screen.getByTestId('AxpDoraMetricsGrid')).toBeInTheDocument();
+      expect(screen.queryByTestId('AxpEngineeringMetricsGrid')).not.toBeInTheDocument();
+    });
+
+    it('switches to NFR Metrics tab when clicked', () => {
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      fireEvent.click(screen.getByText('NFR Metrics'));
+
+      expect(screen.getByText('Filtered View - Engineering Productivity Signals')).toBeInTheDocument();
+      expect(screen.getByTestId('AxpNfrMetricsGridWithFiltersWithE')).toBeInTheDocument();
+      expect(screen.queryByTestId('AxpEngineeringMetricsGrid')).not.toBeInTheDocument();
+    });
+
+    it('can navigate between tabs multiple times', () => {
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      // Start on Enterprise, go to DORA
+      fireEvent.click(screen.getByText('DORA Metrics'));
+      expect(screen.getByTestId('AxpDoraMetricsGrid')).toBeInTheDocument();
+
+      // Go to NFR
+      fireEvent.click(screen.getByText('NFR Metrics'));
+      expect(screen.getByTestId('AxpNfrMetricsGridWithFiltersWithE')).toBeInTheDocument();
+
+      // Back to Enterprise
+      fireEvent.click(screen.getByText('Enterprise Productivity Signals'));
+      expect(screen.getByTestId('AxpEngineeringMetricsGrid')).toBeInTheDocument();
     });
   });
 
-  // Edge: No message when false
-  it('does not show any PageLevelMessage when all are false', () => {
-    renderWithStore();
-    // Only "PageLevelMessage" could be present if children show it, but contents will NOT match success/error
-    expect(screen.queryAllByTestId('PageLevelMessage').every(
-      m => !/Feedback successfully submitted|Feedback downloaded successfully|Something went wrong/.test(m.textContent)
-    )).toBe(true);
+  describe('Monthly Toggle Functionality', () => {
+    it('toggles monthly view state correctly', () => {
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      const toggleSwitch = screen.getByLabelText('toggle');
+      
+      // Initially false
+      expect(screen.getByTestId('monthly-toggle-state')).toHaveTextContent('false');
+
+      // Click to toggle
+      fireEvent.click(toggleSwitch);
+      expect(screen.getByTestId('monthly-toggle-state')).toHaveTextContent('true');
+
+      // Click again to toggle back
+      fireEvent.click(toggleSwitch);
+      expect(screen.getByTestId('monthly-toggle-state')).toHaveTextContent('false');
+    });
+
+    it('passes monthly toggle state to all child components', () => {
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      const toggleSwitch = screen.getByLabelText('toggle');
+      fireEvent.click(toggleSwitch); // Set to true
+
+      // Check Enterprise tab
+      expect(screen.getByTestId('monthly-toggle-state')).toHaveTextContent('true');
+      expect(screen.getByTestId('filtered-monthly-toggle')).toHaveTextContent('true');
+
+      // Check DORA tab
+      fireEvent.click(screen.getByText('DORA Metrics'));
+      expect(screen.getByTestId('dora-monthly-toggle')).toHaveTextContent('true');
+
+      // Check NFR tab
+      fireEvent.click(screen.getByText('NFR Metrics'));
+      expect(screen.getByTestId('nfr-monthly-toggle')).toHaveTextContent('true');
+    });
   });
 
-  // You may add more tests for toggle, callbacks, or links as needed.
+  describe('Last Updated Functionality', () => {
+    it('handles enterprise timestamp updates correctly', () => {
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      fireEvent.click(screen.getByText('Update Enterprise Timestamp'));
+
+      const lastUpdatedComponent = screen.getByTestId('LastUpdatedComponent');
+      expect(lastUpdatedComponent).toHaveTextContent('Last Updated: 2025-01-01');
+    });
+
+    it('handles DORA timestamp updates correctly', () => {
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      fireEvent.click(screen.getByText('DORA Metrics'));
+      fireEvent.click(screen.getByText('Update DORA Timestamp'));
+
+      const lastUpdatedComponent = screen.getByTestId('LastUpdatedComponent');
+      expect(lastUpdatedComponent).toHaveTextContent('Last Updated: 2025-01-01');
+    });
+
+    it('handles NFR timestamp updates correctly', () => {
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      fireEvent.click(screen.getByText('NFR Metrics'));
+      fireEvent.click(screen.getByText('Update NFR Timestamp'));
+
+      const lastUpdatedComponent = screen.getByTestId('LastUpdatedComponent');
+      expect(lastUpdatedComponent).toHaveTextContent('Last Updated: 2025-01-01');
+    });
+
+    it('passes last updated date to filtered view component', () => {
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      fireEvent.click(screen.getByText('Update Enterprise Timestamp'));
+
+      expect(screen.getByTestId('filtered-last-updated')).toHaveTextContent('2025-01-01');
+    });
+  });
+
+  describe('Feedback Messages', () => {
+    it('displays success feedback message when showFeedbackMessage is true', () => {
+      mockUrlRedux.getInt.mockImplementation((modules, module, amexway, key) => {
+        if (key === 'showFeedbackMessage') return 1;
+        return 0;
+      });
+
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      const successMessage = screen.getByTestId('PageLevelMessage');
+      expect(successMessage).toHaveAttribute('data-type', 'success');
+      expect(successMessage).toHaveTextContent('Feedback successfully submitted.');
+    });
+
+    it('dispatches SET_SHOW_FEEDBACK action when success message is dismissed', () => {
+      mockUrlRedux.getInt.mockImplementation((modules, module, amexway, key) => {
+        if (key === 'showFeedbackMessage') return 1;
+        return 0;
+      });
+
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      fireEvent.click(screen.getByTestId('dismiss-message'));
+
+      expect(mockDispatch).toHaveBeenCalledWith({
+        type: SET_SHOW_FEEDBACK,
+        payload: false
+      });
+    });
+
+    it('displays download success message when showSuccessMessage is true', () => {
+      mockUrlRedux.getInt.mockImplementation((modules, module, amexway, key) => {
+        if (key === 'showSuccessMessage') return 1;
+        return 0;
+      });
+
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      const successMessage = screen.getByTestId('PageLevelMessage');
+      expect(successMessage).toHaveAttribute('data-type', 'success');
+      expect(successMessage).toHaveTextContent('Feedback downloaded successfully.');
+    });
+
+    it('dispatches SET_SHOW_FEEDBACK_DOWNLOAD_SUCCESS_MSG action when download success message is dismissed', () => {
+      mockUrlRedux.getInt.mockImplementation((modules, module, amexway, key) => {
+        if (key === 'showSuccessMessage') return 1;
+        return 0;
+      });
+
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      fireEvent.click(screen.getByTestId('dismiss-message'));
+
+      expect(mockDispatch).toHaveBeenCalledWith({
+        type: SET_SHOW_FEEDBACK_DOWNLOAD_SUCCESS_MSG,
+        payload: false
+      });
+    });
+
+    it('displays API error message when showApiErrorMessage is true', () => {
+      mockUrlRedux.getInt.mockImplementation((modules, module, amexway, key) => {
+        if (key === 'showApiErrorMessage') return 1;
+        return 0;
+      });
+
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      const errorMessage = screen.getByTestId('PageLevelMessage');
+      expect(errorMessage).toHaveAttribute('data-type', 'warning');
+      expect(errorMessage).toHaveTextContent('Something went wrong.Please try again after sometime.');
+    });
+
+    it('dispatches SET_SHOW_API_DOWNLOAD_ERROR action when error message is dismissed', () => {
+      mockUrlRedux.getInt.mockImplementation((modules, module, amexway, key) => {
+        if (key === 'showApiErrorMessage') return 1;
+        return 0;
+      });
+
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      fireEvent.click(screen.getByTestId('dismiss-message'));
+
+      expect(mockDispatch).toHaveBeenCalledWith({
+        type: SET_SHOW_API_DOWNLOAD_ERROR,
+        payload: false
+      });
+    });
+
+    it('does not display any messages when all flags are false', () => {
+      mockUrlRedux.getInt.mockReturnValue(0);
+
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      expect(screen.queryByTestId('PageLevelMessage')).not.toBeInTheDocument();
+    });
+
+    it('can display multiple messages simultaneously', () => {
+      mockUrlRedux.getInt.mockImplementation((modules, module, amexway, key) => {
+        if (key === 'showFeedbackMessage') return 1;
+        if (key === 'showApiErrorMessage') return 1;
+        return 0;
+      });
+
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      const messages = screen.getAllByTestId('PageLevelMessage');
+      expect(messages).toHaveLength(2);
+      
+      const messageTypes = messages.map(msg => msg.getAttribute('data-type'));
+      expect(messageTypes).toContain('success');
+      expect(messageTypes).toContain('warning');
+    });
+  });
+
+  describe('Component Integration', () => {
+    it('maintains state consistency across tab switches', () => {
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      // Set monthly toggle to true
+      fireEvent.click(screen.getByLabelText('toggle'));
+
+      // Update timestamp in enterprise tab
+      fireEvent.click(screen.getByText('Update Enterprise Timestamp'));
+
+      // Switch to DORA tab
+      fireEvent.click(screen.getByText('DORA Metrics'));
+
+      // Verify monthly toggle state is preserved
+      expect(screen.getByTestId('dora-monthly-toggle')).toHaveTextContent('true');
+
+      // Verify last updated is preserved when switching back
+      fireEvent.click(screen.getByText('Enterprise Productivity Signals'));
+      expect(screen.getByTestId('LastUpdatedComponent')).toHaveTextContent('Last Updated: 2025-01-01');
+    });
+
+    it('properly handles urlRedux.getInt calls with correct parameters', () => {
+      mockUrlRedux.getInt.mockReturnValue(0);
+
+      render(
+        <Provider store={store}>
+          <EngineeringProductivityMetricsContainer />
+        </Provider>
+      );
+
+      expect(mockUrlRedux.getInt).toHaveBeenCalledWith(
+        'modules', 
+        'axp-one-insight-amex-way', 
+        'amexway', 
+        'feedback', 
+        'showFeedbackMessage'
+      );
+
+      expect(mockUrlRedux.getInt).toHaveBeenCalledWith(
+        'modules', 
+        'axp-one-insight-amex-way', 
+        'amexway', 
+        'downloadFeedback', 
+        'showApiErrorMessage'
+      );
+
+      expect(mockUrlRedux.getInt).toHaveBeenCalledWith(
+        'modules', 
+        'axp-one-insight-amex-way', 
+        'amexway', 
+        'downloadFeedback', 
+        'showSuccessMessage'
+      );
+    });
+  });
 });
