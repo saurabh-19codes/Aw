@@ -1,0 +1,118 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { fromJS } from 'immutable';
+import '@testing-library/jest-dom';
+
+// ---- MOCKS THAT MUST MATCH YOUR FILE’S IMPORT STRINGS ----
+
+// Mock One App router HOC to avoid provider/context requirements
+jest.mock('@americanexpress/one-app-router', () => ({
+  withRouter: (Comp) => (props) => <Comp {...props} />,
+}));
+
+// Mock One App module wrapper HOC to identity (compose will keep it)
+jest.mock('@americanexpress/one-app-module-wrapper', () => () => (Comp) => Comp);
+
+// Mock child components used by AxpOneInsightAmexWay
+jest.mock('../EngineeringProductivityMetricsContainer', () => {
+  // NOTE: the path string above must match the import string in AxpOneInsightAmexWay.jsx
+  return ({ url, showDownloadMessage, showFeedbackMessage, setShowFeedbackMessage }) => (
+    <div data-testid="metrics-container">
+      url={String(url)}
+      download={String(showDownloadMessage)}
+      feedback={String(showFeedbackMessage)}
+      {/* expose a button to prove we received the setter too */}
+      <button onClick={() => setShowFeedbackMessage(true)}>set-feedback-true</button>
+    </div>
+  );
+});
+
+jest.mock('../components/FeedbackAndDownload', () => {
+  // NOTE: the path string above must match the import string in AxpOneInsightAmexWay.jsx
+  return ({ url, setDownloadMessage, setShowFeedbackMessage }) => (
+    <div data-testid="feedback-download">
+      {/* parent passes the whole redux state here; just render truthy/defined */}
+      urlDefined={String(!!url)}
+      <button onClick={() => setDownloadMessage(true)}>download</button>
+      <button onClick={() => setShowFeedbackMessage(true)}>feedback</button>
+    </div>
+  );
+});
+
+// ---- MOCK REDUX ----
+const mockState = fromJS({
+  modules: {
+    'axp-one-insight-amex-way': { url: 'http://mock-url.com' },
+  },
+  // the reducer slice exists too (not strictly needed for these tests)
+  amexway: {
+    url: 'http://mock-url.com',
+    feedback: { showFeedbackMessage: false },
+    downloadFeedback: { showApiErrorMessage: false, showSuccessMessage: false },
+  },
+});
+
+jest.mock('react-redux', () => {
+  const actual = jest.requireActual('react-redux');
+  return {
+    ...actual,
+    // feed our Immutable state into whatever selector the component gives
+    useSelector: jest.fn((selector) => selector(mockState)),
+    useDispatch: () => jest.fn(),
+  };
+});
+
+// ---- SUT IMPORT (after mocks) ----
+import AxpOneInsightAmexWay from '../AxpOneInsightAmexWay';
+
+describe('AxpOneInsightAmexWay', () => {
+  test('renders the children branch when both children and params are provided', () => {
+    render(
+      <AxpOneInsightAmexWay router={{}} location={{}} params={{ id: 'x' }}>
+        <div data-testid="child">child content</div>
+      </AxpOneInsightAmexWay>
+    );
+
+    // Early-return branch container id="layer-3" in your code
+    expect(screen.getByTestId('child')).toBeInTheDocument();
+    // also ensure the metrics/feedback section did NOT render in this branch
+    expect(screen.queryByTestId('metrics-container')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('feedback-download')).not.toBeInTheDocument();
+  });
+
+  test('renders metrics + feedback section (no children/params) and passes correct url', () => {
+    render(<AxpOneInsightAmexWay router={{}} location={{}} params={null} />);
+
+    const metrics = screen.getByTestId('metrics-container');
+    const fnd = screen.getByTestId('feedback-download');
+
+    // url comes from state.getIn(['modules','axp-one-insight-amex-way','url'])
+    expect(metrics).toHaveTextContent('url=http://mock-url.com');
+    // initial local state flags
+    expect(metrics).toHaveTextContent('download=false');
+    expect(metrics).toHaveTextContent('feedback=false');
+
+    // whole redux state object is passed to FeedbackAndDownload as "url"
+    expect(fnd).toHaveTextContent('urlDefined=true');
+  });
+
+  test('clicks update parent state: download=true and feedback=true are propagated to metrics', async () => {
+    render(<AxpOneInsightAmexWay router={{}} location={{}} params={null} />);
+
+    // trigger both setters exposed by FeedbackAndDownload
+    fireEvent.click(screen.getByText('download'));
+    fireEvent.click(screen.getByText('feedback'));
+
+    await waitFor(() => {
+      const metrics = screen.getByTestId('metrics-container');
+      expect(metrics).toHaveTextContent('download=true');
+      expect(metrics).toHaveTextContent('feedback=true');
+    });
+
+    // also prove the setter passed to MetricsContainer works (calls parent setShowFeedbackMessage)
+    fireEvent.click(screen.getByText('set-feedback-true'));
+    await waitFor(() => {
+      expect(screen.getByTestId('metrics-container')).toHaveTextContent('feedback=true');
+    });
+  });
+});
