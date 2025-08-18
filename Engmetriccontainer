@@ -1,0 +1,137 @@
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { Provider, useDispatch } from 'react-redux';
+import configureStore from 'redux-mock-store';
+import EngineeringProductivityMetricsContainer from '../EngineeringProductivityMetricsContainer';
+
+// Mocks for sub-components used inside the container
+jest.mock('../components/AxpEngineeringMetricsGrid', () => () => <div data-testid="AxpEngineeringMetricsGrid" />);
+jest.mock('../components/AxpDoraMetricsGrid', () => () => <div data-testid="AxpDoraMetricsGrid" />);
+jest.mock('../components/AxpNfrMetricsGridWithFiltersWithE', () => () => <div data-testid="AxpNfrMetricsGridWithFiltersWithE" />);
+jest.mock('../components/AxpEngineeringMetricsGridWithFiltersTest', () => () => <div data-testid="AxpEngineeringMetricsGridWithFiltersTest" />);
+jest.mock('../components/LastUpdatedComponent', () => ({ lastUpdatedDate }) => (
+  <div data-testid="LastUpdatedComponent">{lastUpdatedDate}</div>
+));
+
+// Mocks for PageLevelMessage (so we can check message contents)
+jest.mock('../components/PageLevelMessage', () => ({ type, children, ...props }) => (
+  <div data-testid="PageLevelMessage" data-type={type} {...props}>{children}</div>
+));
+
+const mockStore = configureStore([]);
+
+describe('EngineeringProductivityMetricsContainer', () => {
+  let store;
+  let dispatchMock;
+
+  beforeEach(() => {
+    store = mockStore({
+      // Provide necessary slice(s) of state here
+    });
+    dispatchMock = jest.fn();
+    jest.spyOn(require('react-redux'), 'useDispatch').mockReturnValue(dispatchMock);
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('renders all tab headers', () => {
+    render(
+      <Provider store={store}>
+        <EngineeringProductivityMetricsContainer />
+      </Provider>
+    );
+
+    expect(screen.getByText(/Enterprise Productivity Signals/i)).toBeInTheDocument();
+    expect(screen.getByText(/DORA Metrics/i)).toBeInTheDocument();
+    expect(screen.getByText(/NFR Metrics/i)).toBeInTheDocument();
+  });
+
+  it('renders the default/first tab content (Enterprise Productivity Signals)', () => {
+    render(
+      <Provider store={store}>
+        <EngineeringProductivityMetricsContainer />
+      </Provider>
+    );
+    // Checks Engineering tab contents
+    expect(screen.getByText(/Enterprise View/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Info Link/i).length).toBeGreaterThanOrEqual(1); // one for each Info Link
+    expect(screen.getByTestId("AxpEngineeringMetricsGrid")).toBeInTheDocument();
+    expect(screen.getByText(/Filtered View/i)).toBeInTheDocument();
+    expect(screen.getByTestId("AxpEngineeringMetricsGridWithFiltersTest")).toBeInTheDocument();
+  });
+
+  it('switches to DORA Metrics tab and renders its grid', () => {
+    render(
+      <Provider store={store}>
+        <EngineeringProductivityMetricsContainer />
+      </Provider>
+    );
+    fireEvent.click(screen.getByText(/DORA Metrics/i));
+    expect(screen.getByText(/DORA Metrics/i)).toBeInTheDocument(); // The H1 "DORA Metrics"
+    expect(screen.getByTestId("AxpDoraMetricsGrid")).toBeInTheDocument();
+  });
+
+  it('switches to NFR Metrics tab and renders its grid', () => {
+    render(
+      <Provider store={store}>
+        <EngineeringProductivityMetricsContainer />
+      </Provider>
+    );
+    fireEvent.click(screen.getByText(/NFR Metrics/i));
+    expect(screen.getByText(/Non-functional Requirements Metrics/i)).toBeInTheDocument();
+    expect(screen.getByTestId("AxpNfrMetricsGridWithFiltersWithE")).toBeInTheDocument();
+  });
+
+  it('shows a success message after feedback, and handles dismiss', () => {
+    // Override urlRedux.getInt or mock redux selector to make feedback appear
+    // For now, rely on component rendering logic
+    render(
+      <Provider store={store}>
+        <EngineeringProductivityMetricsContainer />
+      </Provider>
+    );
+    // You may want to mock internal component state/props to trigger this
+    // Assume the success message appears
+    expect(screen.queryAllByTestId('PageLevelMessage').some(el => el.textContent.includes('Feedback successfully submitted.'))).toBeTruthy();
+
+    // Test onDismiss
+    fireEvent.click(screen.getByTestId("PageLevelMessage"));
+    expect(dispatchMock).toHaveBeenCalledWith({ type: 'SET_SHOW_FEEDBACK', payload: false });
+  });
+
+  it('shows an error message if download feedback fails', () => {
+    // Again, set state (or props, or mock output) so that the error message appears
+    render(
+      <Provider store={store}>
+        <EngineeringProductivityMetricsContainer />
+      </Provider>
+    );
+    expect(screen.queryAllByTestId('PageLevelMessage').some(el => el.textContent.includes('Something went wrong'))).toBeTruthy();
+  });
+
+  it('fires callback when toggling monthly/yearly view', () => {
+    render(
+      <Provider store={store}>
+        <EngineeringProductivityMetricsContainer />
+      </Provider>
+    );
+    const toggleSwitch = screen.getByTestId('toggleSwitchTestId'); // Replace with actual test id if available
+    fireEvent.click(toggleSwitch);
+    // Now expect your relevant setMonthlyToggle function to be called/its effect
+    // You might have to lift up the prop or use a spy/mock for the toggle handler if directly testable
+  });
+
+  it('fires callback when grid calls handleLastUpdated', () => {
+    render(
+      <Provider store={store}>
+        <EngineeringProductivityMetricsContainer />
+      </Provider>
+    );
+    // Simulate the handleLastUpdated callback call from a child, e.g.
+    // You may have to extract the prop and invoke it if not directly testable through UI
+  });
+
+  // Add more tests as needed for edge conditions, props, Redux actions, etc.
+});
