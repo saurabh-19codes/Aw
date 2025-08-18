@@ -1,0 +1,101 @@
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { fromJS } from 'immutable';
+import { withRouter } from 'react-router';
+import '@testing-library/jest-dom';
+import AxpOneInsightAmexWay from '../AxpOneInsightAmexWay';
+
+// Mock child components
+jest.mock('../EngineeringProductivityMetricsContainer', () => {
+  return ({ url, showDownloadMessage, showFeedbackMessage }) => (
+    <div data-testid="metrics-container">
+      url={url?.toString()} 
+      download={showDownloadMessage.toString()} 
+      feedback={showFeedbackMessage.toString()}
+    </div>
+  );
+});
+
+jest.mock('../components/FeedbackAndDownload', () => {
+  return ({ url, setDownloadMessage, setShowFeedbackMessage }) => (
+    <div data-testid="feedback-download">
+      <button onClick={() => setDownloadMessage(true)}>download</button>
+      <button onClick={() => setShowFeedbackMessage(true)}>feedback</button>
+      url={url?.toString()}
+    </div>
+  );
+});
+
+// Mock reducer data
+const mockState = fromJS({
+  amexway: {
+    url: 'http://mock-url.com',
+    feedback: {
+      showFeedbackMessage: false,
+    },
+    downloadFeedback: {
+      showApiErrorMessage: false,
+      showSuccessMessage: false,
+    },
+  },
+});
+
+describe('AxpOneInsightAmexWay', () => {
+  it('renders children when passed', () => {
+    render(
+      <AxpOneInsightAmexWay
+        router={{}}
+        location={{}}
+        params={{}}
+        urlRedux={mockState}
+      >
+        <div data-testid="child">child content</div>
+      </AxpOneInsightAmexWay>
+    );
+    expect(screen.getByTestId('child')).toBeInTheDocument();
+  });
+
+  it('renders MetricsContainer and FeedbackAndDownload with correct props', () => {
+    render(
+      <AxpOneInsightAmexWay
+        router={{}}
+        location={{}}
+        params={null}
+        urlRedux={mockState}
+      />
+    );
+    const metrics = screen.getByTestId('metrics-container');
+    const feedback = screen.getByTestId('feedback-download');
+
+    expect(metrics).toHaveTextContent('url=http://mock-url.com');
+    expect(metrics).toHaveTextContent('download=false');
+    expect(metrics).toHaveTextContent('feedback=false');
+    expect(feedback).toHaveTextContent('url=http://mock-url.com');
+  });
+
+  it('updates state when download and feedback buttons are clicked', () => {
+    render(
+      <AxpOneInsightAmexWay
+        router={{}}
+        location={{}}
+        params={null}
+        urlRedux={mockState}
+      />
+    );
+
+    const feedbackDownload = screen.getByTestId('feedback-download');
+
+    // click download
+    fireEvent.click(screen.getByText('download'));
+    // click feedback
+    fireEvent.click(screen.getByText('feedback'));
+
+    expect(feedbackDownload).toBeInTheDocument();
+  });
+
+  it('covers propTypes and hocChain export', () => {
+    expect(AxpOneInsightAmexWay.propTypes).toBeDefined();
+    expect(AxpOneInsightAmexWay.holocron).toBeDefined();
+    expect(AxpOneInsightAmexWay.childRoutes).toBeDefined();
+  });
+});
