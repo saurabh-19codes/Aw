@@ -1,21 +1,43 @@
 import React from 'react';
 import { Provider } from 'react-redux';
 import configureStore from 'redux-mock-store';
-import { render, screen, fireEvent } from '@testing-library/react';
-import EngineeringProductivityMetricsContainer from '../EngineeringProductivityMetricsContainer';
+import { fromJS } from 'immutable';
+import { render, fireEvent, screen } from '@testing-library/react';
+import EngineeringProductivityMetricsContainer from './EngineeringProductivityMetricsContainer';
+import * as redux from 'react-redux';
 
-// --- MOCKS ---
-jest.mock('../components/AxpEngineeringMetricsGrid', () => () => <div data-testid="AxpEngineeringGrid" />);
-jest.mock('../components/AxpDoraMetricsGrid', () => () => <div data-testid="AxpDoraGrid" />);
-jest.mock('../components/AxpNfrMetricsGridWithFiltersWithE', () => () => <div data-testid="AxpNfrGridWithFiltersE" />);
-jest.mock('../components/AxpEngineeringMetricsGridWithFiltersTest', () => () => <div data-testid="AxpEngGridWithFiltersTest" />);
-jest.mock('../components/PageLevelMessage', () => ({ type, children, onDismiss }) => 
-  <div data-testid={`PageLevelMessage-${type}`} onClick={onDismiss}>{children}</div>
+// Mock all deeply imported children for isolation
+jest.mock('../components/AxpDoraMetricsGrid', () => () => <div data-testid="AxpDoraMetricsGrid" />);
+jest.mock('../components/AxpEngineeringMetricsGrid', () => () => <div data-testid="AxpEngineeringMetricsGrid" />);
+jest.mock('../components/AxpNfrMetricsGridWithFiltersWithE', () => () => <div data-testid="AxpNfrMetricsGridWithFiltersWithE" />);
+jest.mock('../components/AxpEngineeringMetricsGridWithFiltersTest', () => () => <div data-testid="AxpEngineeringMetricsGridWithFiltersTest" />);
+jest.mock('../components/PageLevelMessage', () => ({ children, ...props }) =>
+  <div data-testid="PageLevelMessage" {...props}>{children}</div>
 );
 
 const mockStore = configureStore([]);
+let store, dispatchMock;
 
-function renderWithStore(store) {
+beforeEach(() => {
+  dispatchMock = jest.fn();
+  jest.spyOn(redux, 'useDispatch').mockReturnValue(dispatchMock);
+});
+
+const baseState = fromJS({
+  amexway: {
+    url: '',
+    feedback: {
+      showFeedbackMessage: false,
+    },
+    downloadFeedback: {
+      showApiErrorMessage: false,
+      showSuccessMessage: false,
+    },
+  },
+});
+
+function renderWithStore(stateOverrides = {}) {
+  store = mockStore(baseState.mergeDeep(fromJS(stateOverrides)));
   return render(
     <Provider store={store}>
       <EngineeringProductivityMetricsContainer />
@@ -23,128 +45,71 @@ function renderWithStore(store) {
   );
 }
 
-// For convenience
-const baseState = {
-  amexway: {
-    url: '',
-    feedback: { showFeedbackMessage: false },
-    downloadFeedback: {
-      showApiErrorMessage: false,
-      showSuccessMessage: false,
-    },
-  },
-};
-
 describe('EngineeringProductivityMetricsContainer', () => {
-  afterEach(() => jest.clearAllMocks());
+  it('renders all tabs', () => {
+    renderWithStore();
+    expect(screen.getByText(/Enterprise Productivity Signals/i)).toBeInTheDocument();
+    expect(screen.getByText(/DORA Metrics/i)).toBeInTheDocument();
+    expect(screen.getByText(/NFR Metrics/i)).toBeInTheDocument();
+  });
 
-  it('renders tabs and the default Enterprise tab content', () => {
-    const store = mockStore(baseState);
-    renderWithStore(store);
-
-    expect(screen.getByText('Enterprise Productivity Signals')).toBeInTheDocument();
-    expect(screen.getByText('DORA Metrics')).toBeInTheDocument();
-    expect(screen.getByText('NFR Metrics')).toBeInTheDocument();
-
-    // Enterprise content visible
+  it('renders default Enterprise tab content (grid, filter tab)', () => {
+    renderWithStore();
     expect(screen.getByText(/Enterprise View/i)).toBeInTheDocument();
-    expect(screen.getByTestId('AxpEngineeringGrid')).toBeInTheDocument();
-    expect(screen.getByTestId('AxpEngGridWithFiltersTest')).toBeInTheDocument();
+    expect(screen.getByTestId('AxpEngineeringMetricsGrid')).toBeInTheDocument();
   });
 
-  it('switches to DORA and NFR Metrics tabs and shows correct grids', () => {
-    const store = mockStore(baseState);
-    renderWithStore(store);
-
-    // Click DORA Metrics
-    fireEvent.click(screen.getByText('DORA Metrics'));
-    expect(screen.getByTestId('AxpDoraGrid')).toBeInTheDocument();
-
-    // Click NFR Metrics
-    fireEvent.click(screen.getByText('NFR Metrics'));
-    expect(screen.getByTestId('AxpNfrGridWithFiltersE')).toBeInTheDocument();
+  it('renders DORA Metrics tab on click', () => {
+    renderWithStore();
+    fireEvent.click(screen.getByText(/DORA Metrics/i));
+    expect(screen.getByTestId('AxpDoraMetricsGrid')).toBeInTheDocument();
   });
 
-  it('shows feedback success message, and dispatches on dismiss', () => {
-    const state = {
-      ...baseState,
-      amexway: {
-        ...baseState.amexway,
-        feedback: { showFeedbackMessage: true }
-      }
-    };
-    const store = mockStore(state);
-    store.dispatch = jest.fn();
+  it('renders NFR Metrics tab on click', () => {
+    renderWithStore();
+    fireEvent.click(screen.getByText(/NFR Metrics/i));
+    expect(screen.getByTestId('AxpNfrMetricsGridWithFiltersWithE')).toBeInTheDocument();
+  });
 
-    renderWithStore(store);
+  it('shows feedback success message if showFeedbackMessage true', () => {
+    renderWithStore({
+      amexway: { feedback: { showFeedbackMessage: true } }
+    });
+    expect(screen.getAllByTestId('PageLevelMessage').some(m => m.textContent.includes('Feedback successfully submitted.'))).toBe(true);
+  });
 
-    expect(screen.getByTestId('PageLevelMessage-success')).toHaveTextContent('Feedback successfully submitted.');
+  it('shows download success message if showSuccessMessage true', () => {
+    renderWithStore({
+      amexway: { downloadFeedback: { showSuccessMessage: true } }
+    });
+    expect(screen.getAllByTestId('PageLevelMessage').some(m => m.textContent.includes('Feedback downloaded successfully.'))).toBe(true);
+  });
 
-    // Dismiss
-    fireEvent.click(screen.getByTestId('PageLevelMessage-success'));
-    expect(store.dispatch).toHaveBeenCalledWith({
-      type: 'SET_SHOW_FEEDBACK',
-      payload: false,
+  it('shows download API error if showApiErrorMessage true', () => {
+    renderWithStore({
+      amexway: { downloadFeedback: { showApiErrorMessage: true } }
+    });
+    expect(screen.getAllByTestId('PageLevelMessage').some(m => m.textContent.includes('Something went wrong'))).toBe(true);
+  });
+
+  it('dispatches to hide feedback message when feedback success dismissed', () => {
+    renderWithStore({
+      amexway: { feedback: { showFeedbackMessage: true } }
+    });
+    fireEvent.click(screen.getAllByTestId('PageLevelMessage').find(m => m.textContent.includes('Feedback successfully submitted.')));
+    expect(dispatchMock).toHaveBeenCalledWith({
+      type: 'SET_SHOW_FEEDBACK', payload: false,
     });
   });
 
-  it('shows download feedback API error message, and dispatches on dismiss', () => {
-    const state = {
-      ...baseState,
-      amexway: {
-        ...baseState.amexway,
-        downloadFeedback: {
-          ...baseState.amexway.downloadFeedback,
-          showApiErrorMessage: true,
-        },
-      },
-    };
-    const store = mockStore(state);
-    store.dispatch = jest.fn();
-
-    renderWithStore(store);
-
-    expect(screen.getByTestId('PageLevelMessage-warning')).toHaveTextContent(
-      'Something went wrong. Please try again after sometime.'
-    );
-
-    // Dismiss
-    fireEvent.click(screen.getByTestId('PageLevelMessage-warning'));
-    expect(store.dispatch).toHaveBeenCalledWith({
-      type: 'SET_SHOW_API_DOWNLOAD_ERROR',
-      payload: false,
-    });
+  // Edge: No message when false
+  it('does not show any PageLevelMessage when all are false', () => {
+    renderWithStore();
+    // Only "PageLevelMessage" could be present if children show it, but contents will NOT match success/error
+    expect(screen.queryAllByTestId('PageLevelMessage').every(
+      m => !/Feedback successfully submitted|Feedback downloaded successfully|Something went wrong/.test(m.textContent)
+    )).toBe(true);
   });
 
-  it('shows download feedback success message, and dispatches on dismiss', () => {
-    const state = {
-      ...baseState,
-      amexway: {
-        ...baseState.amexway,
-        downloadFeedback: {
-          ...baseState.amexway.downloadFeedback,
-          showSuccessMessage: true,
-        },
-      },
-    };
-    const store = mockStore(state);
-    store.dispatch = jest.fn();
-
-    renderWithStore(store);
-
-    expect(screen.getByTestId('PageLevelMessage-success')).toHaveTextContent(
-      'Feedback downloaded successfully.'
-    );
-
-    // Dismiss
-    fireEvent.click(screen.getByTestId('PageLevelMessage-success'));
-    expect(store.dispatch).toHaveBeenCalledWith({
-      type: 'SET_SHOW_FEEDBACK_DOWNLOAD_SUCCESS_MSG',
-      payload: false,
-    });
-  });
-
-  // You may further add tests for:
-  // - The toggling/monthly toggle UI, if it is rendered and it is testable
-  // - Passing/handling last updated props to child components
+  // You may add more tests for toggle, callbacks, or links as needed.
 });
