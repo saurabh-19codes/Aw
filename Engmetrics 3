@@ -1,0 +1,157 @@
+// EngineeringProductivityMetricsContainer.test.jsx
+import React from "react";
+import { render, screen, fireEvent } from "@testing-library/react";
+import { Provider } from "react-redux";
+import configureStore from "redux-mock-store";
+import EngineeringProductivityMetricsContainer from "./EngineeringProductivityMetricsContainer";
+
+// ✅ default imports
+jest.mock("./FeedbackModal", () => () => (
+  <div data-testid="mock-feedback-modal">Feedback Modal</div>
+));
+jest.mock("./ApiErrorModal", () => () => (
+  <div data-testid="mock-api-error">API Error Modal</div>
+));
+jest.mock("./SuccessModal", () => () => (
+  <div data-testid="mock-success-modal">Success Modal</div>
+));
+
+// ✅ named imports
+jest.mock("./TabComponent", () => ({
+  TabComponent: () => <div data-testid="mock-tab">Tab Component</div>,
+}));
+jest.mock("./AmexwayTable", () => ({
+  AmexwayTable: () => <div data-testid="mock-table">Amexway Table</div>,
+}));
+
+const mockStore = configureStore([]);
+
+describe("EngineeringProductivityMetricsContainer", () => {
+  let store;
+
+  beforeEach(() => {
+    store = mockStore({
+      EngineeringProductivityMetricsReducer: {
+        showFeedback: false,
+        showApiDownloadError: false,
+        showFeedbackDownloadSuccessMsg: false,
+      },
+    });
+    store.dispatch = jest.fn();
+  });
+
+  const renderWithProvider = () =>
+    render(
+      <Provider store={store}>
+        <EngineeringProductivityMetricsContainer />
+      </Provider>
+    );
+
+  it("renders container with title and tabs", () => {
+    renderWithProvider();
+    expect(screen.getByText(/Engineering Productivity Metrics/i)).toBeInTheDocument();
+    expect(screen.getByTestId("mock-tab")).toBeInTheDocument();
+  });
+
+  it("renders AmexwayTable by default", () => {
+    renderWithProvider();
+    expect(screen.getByTestId("mock-table")).toBeInTheDocument();
+  });
+
+  it("shows FeedbackModal when showFeedback is true", () => {
+    store = mockStore({
+      EngineeringProductivityMetricsReducer: {
+        showFeedback: true,
+        showApiDownloadError: false,
+        showFeedbackDownloadSuccessMsg: false,
+      },
+    });
+    renderWithProvider();
+    expect(screen.getByTestId("mock-feedback-modal")).toBeInTheDocument();
+  });
+
+  it("shows ApiErrorModal when showApiDownloadError is true", () => {
+    store = mockStore({
+      EngineeringProductivityMetricsReducer: {
+        showFeedback: false,
+        showApiDownloadError: true,
+        showFeedbackDownloadSuccessMsg: false,
+      },
+    });
+    renderWithProvider();
+    expect(screen.getByTestId("mock-api-error")).toBeInTheDocument();
+  });
+
+  it("shows SuccessModal when showFeedbackDownloadSuccessMsg is true", () => {
+    store = mockStore({
+      EngineeringProductivityMetricsReducer: {
+        showFeedback: false,
+        showApiDownloadError: false,
+        showFeedbackDownloadSuccessMsg: true,
+      },
+    });
+    renderWithProvider();
+    expect(screen.getByTestId("mock-success-modal")).toBeInTheDocument();
+  });
+
+  it("dispatches action when dismissing feedback modal", () => {
+    store = mockStore({
+      EngineeringProductivityMetricsReducer: {
+        showFeedback: true,
+        showApiDownloadError: false,
+        showFeedbackDownloadSuccessMsg: false,
+      },
+    });
+    store.dispatch = jest.fn();
+
+    renderWithProvider();
+
+    // simulate closing modal (your FeedbackModal should call onDismiss)
+    fireEvent.click(screen.getByTestId("mock-feedback-modal"));
+
+    expect(store.dispatch).toHaveBeenCalledWith({
+      type: "SET_SHOW_FEEDBACK",
+      payload: false,
+    });
+  });
+
+  it("dispatches action when dismissing error modal", () => {
+    store = mockStore({
+      EngineeringProductivityMetricsReducer: {
+        showFeedback: false,
+        showApiDownloadError: true,
+        showFeedbackDownloadSuccessMsg: false,
+      },
+    });
+    store.dispatch = jest.fn();
+
+    renderWithProvider();
+
+    fireEvent.click(screen.getByTestId("mock-api-error"));
+
+    expect(store.dispatch).toHaveBeenCalledWith({
+      type: "SET_SHOW_API_DOWNLOAD_ERROR",
+      payload: false,
+    });
+  });
+
+  it("dispatches action when dismissing success modal", () => {
+    store = mockStore({
+      EngineeringProductivityMetricsReducer: {
+        showFeedback: false,
+        showApiDownloadError: false,
+        showFeedbackDownloadSuccessMsg: true,
+      },
+    });
+    store.dispatch = jest.fn();
+
+    renderWithProvider();
+
+    fireEvent.click(screen.getByTestId("mock-success-modal"));
+
+    expect(store.dispatch).toHaveBeenCalledWith({
+      type: "SET_SHOW_FEEDBACK_DOWNLOAD_SUCCESS_MSG",
+      payload: false,
+    });
+  });
+});
