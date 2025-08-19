@@ -1,0 +1,228 @@
+// __tests__/EngineeringProductivityMetricsContainer.spec.jsx
+import React from 'react';
+import { Provider } from 'react-redux';
+import { createStore } from 'redux';
+import { render, screen, fireEvent } from '@testing-library/react';
+
+import reducer, {
+  SET_URL,
+  SET_SHOW_FEEDBACK,
+  SET_SHOW_API_DOWNLOAD_ERROR,
+  SET_SHOW_FEEDBACK_DOWNLOAD_SUCCESS_MSG,
+} from '../reducer';
+
+import EngineeringProductivityMetricsContainer from '../containers/EngineeringProductivityMetricsContainer';
+
+// ---- dls-react (Amex DLS) mocks ----
+jest.mock('@americanexpress/dls-react', () => {
+  const React = require('react');
+  return {
+    CardRounded: ({ children }) => <div data-testid="card-rounded">{children}</div>,
+    IconGuide: () => <i data-testid="icon-guide" />,
+    TabGroup: ({ children }) => <div data-testid="tab-group">{children}</div>,
+    TabMenu: ({ children }) => <div data-testid="tab-menu">{children}</div>,
+    Tab: ({ children }) => <div data-testid="tab">{children}</div>,
+    TabContentGroup: ({ children }) => <div data-testid="tabcontent-group">{children}</div>,
+    TabContent: ({ children }) => <section data-testid="tabcontent">{children}</section>,
+    ToggleSwitch: ({ onClick }) => (
+      <button type="button" data-testid="toggle-switch" onClick={onClick}>
+        toggle
+      </button>
+    ),
+    PageLevelMessage: ({ id = 'plm', type = 'neutral', onDismiss, children }) => (
+      <div data-testid={`plm-${type}`}>
+        <span>{children}</span>
+        {onDismiss && (
+          <button type="button" aria-label={`dismiss-${id}`} onClick={onDismiss}>
+            Dismiss
+          </button>
+        )}
+      </div>
+    ),
+  };
+});
+
+// ---- Child component mocks (keep props the container expects) ----
+jest.mock('../components/LastUpdatedComponent', () => (props) => (
+  <div data-testid="last-updated">{String(props.lastUpdatedDate || '')}</div>
+));
+
+jest.mock('../components/AxpEngineeringMetricsGrid', () => (props) => (
+  <button
+    type="button"
+    data-testid="eng-grid"
+    onClick={() => props.handleEnterpriseTimeLastUpdated?.('2025-01-01')}
+  >
+    ENG GRID
+  </button>
+));
+
+jest.mock('../components/AxpDoraMetricsGrid', () => (props) => (
+  <button
+    type="button"
+    data-testid="dora-grid"
+    onClick={() => props.handleDora?.('2025-01-02')}
+  >
+    DORA GRID
+  </button>
+));
+
+jest.mock('../components/AxpNFRMetricsGrid', () => (props) => (
+  <button
+    type="button"
+    data-testid="nfr-grid"
+    onClick={() => props.handleNfrLastUpdated?.('2025-01-03')}
+  >
+    NFR GRID
+  </button>
+));
+
+jest.mock('../components/AxpEngineeringMetricsGridWithFiltersTest', () => (props) => (
+  <div data-testid="eng-filters-test">{String(props.isMonthlyToggle)}</div>
+));
+
+jest.mock('../components/AxpEngineeringMetricsGridWithFiltersWithEb', () => (props) => (
+  <div data-testid="eng-filters-eb">{String(props.isMonthlyToggle)}</div>
+));
+
+jest.mock('../components/AxpDoraWithFilters', () => () => (
+  <div data-testid="dora-filters">dora-filters</div>
+));
+
+jest.mock('../components/AxpNFRMetricsGridWithFiltersWithEb', () => (props) => (
+  <div data-testid="nfr-filters-eb">nfr-filters</div>
+));
+
+// CSS import in the container
+jest.mock('../containers/style.scss', () => ({}));
+
+// ------- helpers -------
+const renderWithStore = (preActions = []) => {
+  const store = createStore(reducer);
+  preActions.forEach((a) => store.dispatch(a));
+  const ui = render(
+    <Provider store={store}>
+      <EngineeringProductivityMetricsContainer />
+    </Provider>
+  );
+  return { store, ...ui };
+};
+
+// ------- tests -------
+
+test('renders tab titles and the Enterprise view header', () => {
+  renderWithStore([{ type: SET_URL, payload: 'Enterprise_Productivity_Signals' }]);
+
+  // Tab titles
+  expect(screen.getByText(/Enterprise Productivity Signals/i)).toBeInTheDocument();
+  expect(screen.getByText(/DORA Metrics/i)).toBeInTheDocument();
+  expect(screen.getByText(/NFR Metrics/i)).toBeInTheDocument();
+
+  // Enterprise view H1
+  expect(
+    screen.getByText(/Enterprise View - Engineering Productivity Signals/i)
+  ).toBeInTheDocument();
+});
+
+test('toggle switch flips monthly view text and propagates into filter grids', () => {
+  renderWithStore([{ type: SET_URL, payload: 'Enterprise_Productivity_Signals' }]);
+
+  // Initial text: monthlyToggle = false -> "Switch to monthly view"
+  expect(screen.getByText(/Switch to monthly view/i)).toBeInTheDocument();
+
+  // Toggle -> becomes true -> "Switch to yearly view"
+  fireEvent.click(screen.getByTestId('toggle-switch'));
+  expect(screen.getByText(/Switch to yearly view/i)).toBeInTheDocument();
+
+  // And the value flows into filter grids via prop isMonthlyToggle
+  expect(screen.getByTestId('eng-filters-test')).toHaveTextContent('true');
+  expect(screen.getByTestId('eng-filters-eb')).toHaveTextContent('true');
+});
+
+test('clicking ENG grid updates enterprise "LastUpdatedComponent"', () => {
+  renderWithStore([{ type: SET_URL, payload: 'Enterprise_Productivity_Signals' }]);
+
+  // Trigger child -> calls handleEnterpriseTimeLastUpdated('2025-01-01')
+  fireEvent.click(screen.getByTestId('eng-grid'));
+
+  // Mocked LastUpdatedComponent simply prints the date it receives
+  expect(screen.getByTestId('last-updated')).toHaveTextContent('2025-01-01');
+});
+
+test('shows feedback success, dismiss sets flag to false in Redux', () => {
+  const { store } = renderWithStore([
+    { type: SET_URL, payload: 'Enterprise_Productivity_Signals' },
+    { type: SET_SHOW_FEEDBACK, payload: true },
+  ]);
+
+  const msg = screen.getByText(/Feedback successfully submitted/i);
+  expect(msg).toBeInTheDocument();
+
+  fireEvent.click(screen.getByLabelText(/dismiss-pageLevelMessageNeutral/i));
+  // Message should disappear after dispatch
+  expect(screen.queryByText(/Feedback successfully submitted/i)).not.toBeInTheDocument();
+
+  // Optional: verify store flag actually went false
+  expect(
+    store.getState().getIn(['amexway', 'feedback', 'showFeedbackMessage'])
+  ).toBe(false);
+});
+
+test('shows download API error, dismiss clears it', () => {
+  const { store } = renderWithStore([
+    { type: SET_URL, payload: 'Enterprise_Productivity_Signals' },
+    { type: SET_SHOW_API_DOWNLOAD_ERROR, payload: true },
+  ]);
+
+  const msg = screen.getByText(/Something went wrong\.Please try again after sometime\./i);
+  expect(msg).toBeInTheDocument();
+
+  fireEvent.click(screen.getByLabelText(/dismiss-pageLevelMessageNeutral/i));
+  expect(
+    screen.queryByText(/Something went wrong\.Please try again after sometime\./i)
+  ).not.toBeInTheDocument();
+
+  expect(
+    store.getState().getIn(['amexway', 'downloadFeedback', 'showApiErrorMessage'])
+  ).toBe(false);
+});
+
+test('shows download success message, dismiss clears it', () => {
+  const { store } = renderWithStore([
+    { type: SET_URL, payload: 'Enterprise_Productivity_Signals' },
+    { type: SET_SHOW_FEEDBACK_DOWNLOAD_SUCCESS_MSG, payload: true },
+  ]);
+
+  const msg = screen.getByText(/Feedback downloaded successfully/i);
+  expect(msg).toBeInTheDocument();
+
+  fireEvent.click(screen.getByLabelText(/dismiss-pageLevelMessageNeutral/i));
+  expect(
+    screen.queryByText(/Feedback downloaded successfully/i)
+  ).not.toBeInTheDocument();
+
+  expect(
+    store.getState().getIn(['amexway', 'downloadFeedback', 'showSuccessMessage'])
+  ).toBe(false);
+});
+
+test('DORA last-updated area appears for DORA_Metrics and updates from child', () => {
+  renderWithStore([{ type: SET_URL, payload: 'DORA_Metrics' }]);
+
+  // Header present
+  expect(screen.getByText(/DORA Metrics/i)).toBeInTheDocument();
+
+  // Trigger child -> updates last updated
+  fireEvent.click(screen.getByTestId('dora-grid'));
+  expect(screen.getByTestId('last-updated')).toHaveTextContent('2025-01-02');
+});
+
+test('NFR last-updated area appears for NFR_Metrics and updates from child', () => {
+  renderWithStore([{ type: SET_URL, payload: 'NFR_Metrics' }]);
+
+  // Header present
+  expect(screen.getByText(/Non-functional Requirements Metrics/i)).toBeInTheDocument();
+
+  fireEvent.click(screen.getByTestId('nfr-grid'));
+  expect(screen.getByTestId('last-updated')).toHaveTextContent('2025-01-03');
+});
