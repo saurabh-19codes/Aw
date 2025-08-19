@@ -1,0 +1,283 @@
+/* eslint-disable react/jsx-props-no-spreading */
+import React from 'react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
+import '@testing-library/jest-dom';
+
+import { EngineeringProductivityMetricsContainer } from './EngineeringProductivityMetricsContainer';
+import {
+  SET_SHOW_FEEDBACK,
+  SET_SHOW_API_DOWNLOAD_ERROR,
+  SET_SHOW_FEEDBACK_DOWNLOAD_SUCCESS_MSG,
+} from '../reducer';
+
+// --- Redux mocks ---
+const mockDispatch = jest.fn();
+const mockUseDispatch = jest.fn(() => mockDispatch);
+const mockUseSelector = jest.fn();
+
+jest.mock('react-redux', () => ({
+  useDispatch: () => mockUseDispatch(),
+  useSelector: (sel) => mockUseSelector(sel),
+}));
+
+// --- DSL / UI kit mocks ---
+jest.mock('@americanexpress/dls-react', () => ({
+  __esModule: true,
+  // Layout / tabs
+  TabGroup: ({ children }) => <div data-testid="tab-group">{children}</div>,
+  TabMenu: ({ children }) => <div data-testid="tab-menu">{children}</div>,
+  Tab: ({ children, id }) => (
+    <div data-testid={`tab-${id || 'unknown'}`}>{children}</div>
+  ),
+  TabContentGroup: ({ children }) => (
+    <div data-testid="tab-content-group">{children}</div>
+  ),
+  TabContent: ({ children, labelledBy }) => (
+    <section data-testid={`tab-content-${labelledBy || 'unknown'}`}>
+      {children}
+    </section>
+  ),
+
+  // Cards + messages
+  CardRounded: ({ children }) => (
+    <div data-testid="card-rounded">{children}</div>
+  ),
+  PageLevelMessage: ({ id, type, onDismiss, children }) => (
+    <div role="alert" data-testid={`plm-${id}-${type}`}>
+      <button type="button" aria-label="dismiss" onClick={onDismiss}>
+        dismiss
+      </button>
+      {children}
+    </div>
+  ),
+
+  // Misc
+  IconGuide: () => <svg data-testid="icon-guide" aria-hidden="true" />,
+  ToggleSwitch: ({ onClick, name, ...rest }) => (
+    <button
+      type="button"
+      data-testid={rest['data-testid'] || name || 'toggle'}
+      onClick={onClick}
+    >
+      toggle
+    </button>
+  ),
+}));
+
+// --- Child component mocks (keep paths exactly as in your component) ---
+jest.mock('../components/LastUpdatedComponent', () => ({
+  __esModule: true,
+  default: ({ lastUpdatedDate }) => (
+    <div data-testid="last-updated">{String(lastUpdatedDate || '')}</div>
+  ),
+}));
+
+jest.mock('../components/AxpEngineeringMetricsGrid', () => ({
+  __esModule: true,
+  default: (props) => (
+    <div
+      data-testid="eng-grid"
+      data-monthlytoggle={String(props.monthlyToggle)}
+    />
+  ),
+}));
+
+jest.mock('../components/AxpEngineeringMetricsGridWithFiltersTest', () => ({
+  __esModule: true,
+  default: (props) => (
+    <div
+      data-testid="eng-grid-with-filters-test"
+      data-monthlytoggle={String(props.isMonthlyToggle)}
+    />
+  ),
+}));
+
+jest.mock(
+  '../components/AxpEngineeringMetricsGridWithFiltersWithEb',
+  () => ({
+    __esModule: true,
+    default: (props) => (
+      <div
+        data-testid="eng-grid-with-filters-eb"
+        data-monthlytoggle={String(props.isMonthlyToggle)}
+      />
+    ),
+  })
+);
+
+jest.mock('../components/AxpDoraMetricsGrid', () => ({
+  __esModule: true,
+  default: (props) => (
+    <div
+      data-testid="dora-grid"
+      data-has-set-monthlytoggle={String(typeof props.setMonthlyToggle === 'function')}
+    />
+  ),
+}));
+
+jest.mock('../components/AxpDoraWithFilters', () => ({
+  __esModule: true,
+  default: () => <div data-testid="dora-with-filters" />,
+}));
+
+jest.mock('../components/AxpNFRMetricsGrid', () => ({
+  __esModule: true,
+  default: (props) => (
+    <div
+      data-testid="nfr-grid"
+      data-has-set-monthlytoggle={String(typeof props.setMonthlyToggle === 'function')}
+    />
+  ),
+}));
+
+jest.mock('../components/AxpNFRMetricsGridWithFiltersWithEb', () => ({
+  __esModule: true,
+  default: () => <div data-testid="nfr-with-filters" />,
+}));
+
+// Filters context wrapper
+jest.mock('../FiltersContext', () => ({
+  __esModule: true,
+  default: ({ children }) => (
+    <div data-testid="filters-provider">{children}</div>
+  ),
+}));
+
+// Style import
+jest.mock('../style.scss', () => ({}), { virtual: true });
+
+// ---------- helpers ----------
+const makeState = ({
+  url = 'Enterprise_Productivity_Signals',
+  showFeedback = false,
+  showApiError = false,
+  showSuccess = false,
+} = {}) => {
+  // a tiny "Immutable-like" object with getIn
+  const state = {
+    modules: {
+      'axp-one-insight-amex-way': {
+        amexway: {
+          url,
+          feedback: { showFeedbackMessage: showFeedback },
+          downloadFeedback: {
+            showApiErrorMessage: showApiError,
+            showSuccessMessage: showSuccess,
+          },
+        },
+      },
+    },
+  };
+
+  return {
+    getIn: (pathArr) => pathArr.reduce((acc, k) => (acc == null ? acc : acc[k]), state),
+  };
+};
+
+const renderWithState = (opts = {}) => {
+  mockDispatch.mockClear();
+  mockUseSelector.mockImplementation((sel) => sel(makeState(opts)));
+  return render(<EngineeringProductivityMetricsContainer />);
+};
+
+// ---------- tests ----------
+describe('EngineeringProductivityMetricsContainer', () => {
+  test('Enterprise route: shows header, last-updated, and toggles monthly view', () => {
+    renderWithState({ url: 'Enterprise_Productivity_Signals' });
+
+    // header
+    expect(
+      screen.getByText('Enterprise View - Engineering Productivity Signals')
+    ).toBeInTheDocument();
+
+    // last updated
+    expect(screen.getAllByTestId('last-updated').length).toBeGreaterThan(0);
+
+    // initial toggle text
+    expect(screen.getByText('Switch to monthly view')).toBeInTheDocument();
+
+    // toggle
+    fireEvent.click(screen.getByTestId('childtoggle1'));
+    expect(screen.getByText('Switch to yearly view')).toBeInTheDocument();
+
+    // grid receives monthlyToggle=true after click
+    expect(screen.getByTestId('eng-grid')).toHaveAttribute(
+      'data-monthlytoggle',
+      'true'
+    );
+
+    // filtered views are present and wired with monthly toggle
+    expect(screen.getByTestId('eng-grid-with-filters-test')).toHaveAttribute(
+      'data-monthlytoggle',
+      'true'
+    );
+    expect(screen.getByTestId('eng-grid-with-filters-eb')).toHaveAttribute(
+      'data-monthlytoggle',
+      'true'
+    );
+
+    // info link exists (aria-label set in component)
+    expect(
+      screen.getAllByRole('link', { name: /info link/i }).length
+    ).toBeGreaterThan(0);
+  });
+
+  test('DORA route: shows DORA header + last-updated + child grids', () => {
+    renderWithState({ url: 'DORA_Metrics' });
+
+    expect(screen.getByText('DORA Metrics')).toBeInTheDocument();
+    // last updated only renders for current route
+    expect(screen.getAllByTestId('last-updated').length).toBeGreaterThan(0);
+    // grid plus filtered section present
+    expect(screen.getByTestId('dora-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('dora-with-filters')).toBeInTheDocument();
+  });
+
+  test('NFR route: shows NFR header and filtered grid', () => {
+    renderWithState({ url: 'NFR_Metrics' });
+
+    expect(
+      screen.getByText('Non-functional Requirements Metrics')
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('nfr-grid')).toBeInTheDocument();
+    expect(screen.getByTestId('nfr-with-filters')).toBeInTheDocument();
+  });
+
+  test('Page level messages render and dispatch correct actions on dismiss', () => {
+    renderWithState({
+      url: 'Enterprise_Productivity_Signals',
+      showFeedback: true,
+      showApiError: true,
+      showSuccess: true,
+    });
+
+    // Success after feedback submit
+    const submitMsg = screen.getByText('Feedback successfully submitted.');
+    const submitAlert = submitMsg.closest('[role="alert"]');
+    fireEvent.click(within(submitAlert).getByRole('button', { name: /dismiss/i }));
+    expect(mockDispatch).toHaveBeenCalledWith({
+      type: SET_SHOW_FEEDBACK,
+      payload: false,
+    });
+
+    // API error on download
+    const errorMsg = screen.getByText(
+      'Something went wrong.Please try again after sometime.'
+    );
+    const errorAlert = errorMsg.closest('[role="alert"]');
+    fireEvent.click(within(errorAlert).getByRole('button', { name: /dismiss/i }));
+    expect(mockDispatch).toHaveBeenCalledWith({
+      type: SET_SHOW_API_DOWNLOAD_ERROR,
+      payload: false,
+    });
+
+    // Download success
+    const downloadMsg = screen.getByText('Feedback downloaded successfully.');
+    const downloadAlert = downloadMsg.closest('[role="alert"]');
+    fireEvent.click(within(downloadAlert).getByRole('button', { name: /dismiss/i }));
+    expect(mockDispatch).toHaveBeenCalledWith({
+      type: SET_SHOW_FEEDBACK_DOWNLOAD_SUCCESS_MSG,
+      payload: false,
+    });
+  });
+});
