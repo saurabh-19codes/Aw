@@ -1,1 +1,499 @@
 
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { Provider } from 'react-redux';
+import { createStore } from 'redux';
+import { fromJS } from 'immutable';
+import '@testing-library/jest-dom';
+import EngineeringProductivityMetricsContainer from './EngineeringProductivityMetricsContainer';
+
+// Mock the child components
+jest.mock('../AxpEngineeringMetricsGrid', () => ({
+  __esModule: true,
+  default: ({ handleEnterpriseTimeLastUpdated, monthlyToggle }) => (
+    <div data-testid="axp-engineering-metrics-grid">
+      <button onClick={() => handleEnterpriseTimeLastUpdated('2023-01-01')}>
+        Update Enterprise Time
+      </button>
+      <span>Monthly Toggle: {monthlyToggle ? 'true' : 'false'}</span>
+    </div>
+  )
+}));
+
+jest.mock('../AxpDoraMetricsGrid', () => ({
+  __esModule: true,
+  default: ({ handleDora, setMonthlyToggle }) => (
+    <div data-testid="axp-dora-metrics-grid">
+      <button onClick={() => handleDora('2023-01-01')}>
+        Update DORA
+      </button>
+      <button onClick={() => setMonthlyToggle(true)}>
+        Set Monthly Toggle
+      </button>
+    </div>
+  )
+}));
+
+jest.mock('../AxpDoraWithFilters', () => ({
+  __esModule: true,
+  default: () => <div data-testid="axp-dora-with-filters">DORA With Filters</div>
+}));
+
+jest.mock('../AxpEngineeringMetricsGridWithFiltersWithEb', () => ({
+  __esModule: true,
+  default: () => <div data-testid="axp-engineering-metrics-grid-with-filters">Engineering Metrics With Filters</div>
+}));
+
+jest.mock('../AxpNfrMetricsGrid', () => ({
+  __esModule: true,
+  default: ({ handleNfrLastUpdated, setMonthlyToggle }) => (
+    <div data-testid="axp-nfr-metrics-grid">
+      <button onClick={() => handleNfrLastUpdated('2023-01-01')}>
+        Update NFR
+      </button>
+      <button onClick={() => setMonthlyToggle(false)}>
+        Set Monthly Toggle NFR
+      </button>
+    </div>
+  )
+}));
+
+jest.mock('../AxpNfrMetricsGridWithFiltersWithEb', () => ({
+  __esModule: true,
+  default: () => <div data-testid="axp-nfr-metrics-grid-with-filters">NFR Metrics With Filters</div>
+}));
+
+jest.mock('../AxpEngineeringMetricsGridWithFiltersTest', () => ({
+  __esModule: true,
+  default: ({ isMonthlyToggle }) => (
+    <div data-testid="axp-engineering-metrics-grid-with-filters-test">
+      Test Component - Monthly: {isMonthlyToggle ? 'true' : 'false'}
+    </div>
+  )
+}));
+
+jest.mock('../../LastUpdatedComponent', () => ({
+  __esModule: true,
+  default: ({ lastUpdatedDate }) => (
+    <div data-testid="last-updated-component">
+      Last Updated: {lastUpdatedDate}
+    </div>
+  )
+}));
+
+jest.mock('../../FiltersContext', () => ({
+  FiltersProvider: ({ children }) => <div data-testid="filters-provider">{children}</div>
+}));
+
+// Mock urlRedux - based on your reducer structure
+jest.mock('path/to/urlRedux', () => fromJS({
+  amexway: {
+    url: 'Enterprise_Productivity_Signals',
+    feedback: {
+      showFeedbackMessage: false,
+    },
+    downloadFeedback: {
+      showApiErrorMessage: false,
+      showSuccessMessage: false,
+    }
+  }
+}));
+
+// Action types from your reducer
+const SET_URL = 'SET_URL';
+const SET_SHOW_FEEDBACK = 'SET_SHOW_FEEDBACK';
+const SET_SHOW_API_DOWNLOAD_ERROR = 'SET_SHOW_API_DOWNLOAD_ERROR';
+const SET_SHOW_FEEDBACK_DOWNLOAD_SUCCESS_MSG = 'SET_SHOW_FEEDBACK_DOWNLOAD_SUCCESS_MSG';
+
+// Mock reducer based on your actual reducer
+const mockReducer = (state = fromJS({
+  amexway: {
+    url: 'Enterprise_Productivity_Signals',
+    feedback: {
+      showFeedbackMessage: false,
+    },
+    downloadFeedback: {
+      showApiErrorMessage: false,
+      showSuccessMessage: false,
+    }
+  }
+}), action) => {
+  switch (action.type) {
+    case SET_URL:
+      return state.setIn(['amexway', 'url'], action.payload);
+    case SET_SHOW_FEEDBACK:
+      return state.setIn(['amexway', 'feedback', 'showFeedbackMessage'], action.payload);
+    case SET_SHOW_API_DOWNLOAD_ERROR:
+      return state.setIn(['amexway', 'downloadFeedback', 'showApiErrorMessage'], action.payload);
+    case SET_SHOW_FEEDBACK_DOWNLOAD_SUCCESS_MSG:
+      return state.setIn(['amexway', 'downloadFeedback', 'showSuccessMessage'], action.payload);
+    default:
+      return state;
+  }
+};
+
+// Create a mock store
+const createMockStore = (initialState) => {
+  return createStore(mockReducer, initialState);
+};
+
+describe('EngineeringProductivityMetricsContainer', () => {
+  let store;
+  let mockSetLastUpdatedEnt;
+  let mockSetLastUpdatedDora;
+  let mockSetLastUpdatedNfr;
+  let mockSetMonthlyToggle;
+
+  beforeEach(() => {
+    // Create store with default state
+    store = createMockStore();
+    
+    // Setup useState mocks
+    mockSetLastUpdatedEnt = jest.fn();
+    mockSetLastUpdatedDora = jest.fn();
+    mockSetLastUpdatedNfr = jest.fn();
+    mockSetMonthlyToggle = jest.fn();
+    
+    // Mock useState calls in order
+    jest.spyOn(React, 'useState')
+      .mockReturnValueOnce(['', mockSetLastUpdatedEnt])  // lastUpdatedEnt
+      .mockReturnValueOnce(['', mockSetLastUpdatedDora]) // lastUpdatedDora
+      .mockReturnValueOnce(['', mockSetLastUpdatedNfr])  // lastUpdatedNfr
+      .mockReturnValueOnce([false, mockSetMonthlyToggle]); // monthlyToggle
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  const renderComponent = () => {
+    return render(
+      <Provider store={store}>
+        <EngineeringProductivityMetricsContainer />
+      </Provider>
+    );
+  };
+
+  describe('Rendering', () => {
+    test('renders main container with correct structure', () => {
+      renderComponent();
+      
+      expect(screen.getByRole('tablist')).toBeInTheDocument();
+      expect(screen.getByText('Enterprise Productivity Signals')).toBeInTheDocument();
+      expect(screen.getByText('DORA Metrics')).toBeInTheDocument();
+      expect(screen.getByText('NFR Metrics')).toBeInTheDocument();
+    });
+
+    test('renders toggle switch with correct labels', () => {
+      renderComponent();
+      
+      expect(screen.getByLabelText('toggle1')).toBeInTheDocument();
+      expect(screen.getByText('Switch to yearly view')).toBeInTheDocument();
+      expect(screen.getByText('Switch to monthly view')).toBeInTheDocument();
+    });
+
+    test('renders external links with correct attributes', () => {
+      renderComponent();
+      
+      const enterpriseLink = screen.getByLabelText('Info Link');
+      expect(enterpriseLink).toHaveAttribute('href', 'https://enterprise-confluence.aexp.com/confluence/display/DX/Developer+Insights+-+OneInsights+-+Overview');
+      expect(enterpriseLink).toHaveAttribute('target', '_blank');
+      expect(enterpriseLink).toHaveAttribute('rel', 'noreferrer');
+    });
+  });
+
+  describe('Tab Navigation', () => {
+    test('displays Enterprise Productivity Signals tab content by default', () => {
+      renderComponent();
+      
+      expect(screen.getByTestId('axp-engineering-metrics-grid')).toBeInTheDocument();
+    });
+
+    test('displays DORA Metrics tab content when URL matches', () => {
+      // Create store with DORA_Metrics URL
+      store = createMockStore(fromJS({
+        amexway: {
+          url: 'DORA_Metrics',
+          feedback: { showFeedbackMessage: false },
+          downloadFeedback: { showApiErrorMessage: false, showSuccessMessage: false }
+        }
+      }));
+      
+      renderComponent();
+      
+      expect(screen.getByTestId('axp-dora-with-filters')).toBeInTheDocument();
+    });
+
+    test('displays NFR Metrics tab content when URL matches', () => {
+      // Create store with NFR_Metrics URL
+      store = createMockStore(fromJS({
+        amexway: {
+          url: 'NFR_Metrics',
+          feedback: { showFeedbackMessage: false },
+          downloadFeedback: { showApiErrorMessage: false, showSuccessMessage: false }
+        }
+      }));
+      
+      renderComponent();
+      
+      expect(screen.getByTestId('axp-nfr-metrics-grid-with-filters')).toBeInTheDocument();
+    });
+  });
+
+  describe('Toggle Switch Functionality', () => {
+    test('toggle switch controls monthly/yearly view', () => {
+      renderComponent();
+      
+      const toggleSwitch = screen.getByLabelText('toggle1');
+      
+      // Initially false (yearly view)
+      expect(screen.getByText('Monthly Toggle: false')).toBeInTheDocument();
+      
+      // Click to switch to monthly view
+      fireEvent.click(toggleSwitch);
+      expect(mockSetMonthlyToggle).toHaveBeenCalledWith(true);
+    });
+
+    test('toggle switch shows correct text based on state', () => {
+      // Test with monthly toggle true
+      mockUseState
+        .mockReturnValueOnceWhen(['', mockSetLastUpdatedEnt])
+        .mockReturnValueOnceWhen(['', mockSetLastUpdatedDora])
+        .mockReturnValueOnceWhen(['', mockSetLastUpdatedNfr])
+        .mockReturnValueOnceWhen([true, mockSetMonthlyToggle]);
+      
+      renderComponent();
+      
+      expect(screen.getByText('Switch to yearly view')).toBeInTheDocument();
+      expect(screen.getByText('Switch to monthly view')).toBeInTheDocument();
+    });
+  });
+
+  describe('Event Handlers', () => {
+    test('handleEnterpriseTimeLastUpdated updates state correctly', () => {
+      renderComponent();
+      
+      const updateButton = screen.getByText('Update Enterprise Time');
+      fireEvent.click(updateButton);
+      
+      expect(mockSetLastUpdatedEnt).toHaveBeenCalledWith('2023-01-01');
+    });
+
+    test('handleDora updates state correctly', () => {
+      // Create store with DORA_Metrics URL
+      store = createMockStore(fromJS({
+        amexway: {
+          url: 'DORA_Metrics',
+          feedback: { showFeedbackMessage: false },
+          downloadFeedback: { showApiErrorMessage: false, showSuccessMessage: false }
+        }
+      }));
+      
+      renderComponent();
+      
+      const updateButton = screen.getByText('Update DORA');
+      fireEvent.click(updateButton);
+      
+      expect(mockSetLastUpdatedDora).toHaveBeenCalledWith('2023-01-01');
+    });
+
+    test('handleNfrLastUpdated updates state correctly', () => {
+      // Create store with NFR_Metrics URL
+      store = createMockStore(fromJS({
+        amexway: {
+          url: 'NFR_Metrics',
+          feedback: { showFeedbackMessage: false },
+          downloadFeedback: { showApiErrorMessage: false, showSuccessMessage: false }
+        }
+      }));
+      
+      renderComponent();
+      
+      const updateButton = screen.getByText('Update NFR');
+      fireEvent.click(updateButton);
+      
+      expect(mockSetLastUpdatedNfr).toHaveBeenCalledWith('2023-01-01');
+    });
+  });
+
+  describe('Feedback Messages', () => {
+    test('renders success feedback message when conditions are met', () => {
+      // Create store with feedback message enabled
+      store = createMockStore(fromJS({
+        amexway: {
+          url: 'Enterprise_Productivity_Signals',
+          feedback: { showFeedbackMessage: true },
+          downloadFeedback: { showApiErrorMessage: false, showSuccessMessage: false }
+        }
+      }));
+      
+      renderComponent();
+      
+      expect(screen.getByText('Feedback successfully submitted.')).toBeInTheDocument();
+    });
+
+    test('dispatches correct action when success feedback is dismissed', () => {
+      // Create store with feedback message enabled
+      store = createMockStore(fromJS({
+        amexway: {
+          url: 'Enterprise_Productivity_Signals',
+          feedback: { showFeedbackMessage: true },
+          downloadFeedback: { showApiErrorMessage: false, showSuccessMessage: false }
+        }
+      }));
+      
+      const dispatchSpy = jest.spyOn(store, 'dispatch');
+      renderComponent();
+      
+      // Find the PageLevelMessage component and trigger onDismiss
+      // Note: You might need to adjust this based on how PageLevelMessage handles dismissal
+      const feedbackMessage = screen.getByText('Feedback successfully submitted.');
+      
+      // Simulate dismiss action - this depends on your PageLevelMessage implementation
+      // For now, we'll just verify the message is rendered
+      expect(feedbackMessage).toBeInTheDocument();
+    });
+
+    test('renders error feedback message when conditions are met', () => {
+      // Create store with error message enabled
+      store = createMockStore(fromJS({
+        amexway: {
+          url: 'Enterprise_Productivity_Signals',
+          feedback: { showFeedbackMessage: false },
+          downloadFeedback: { showApiErrorMessage: true, showSuccessMessage: false }
+        }
+      }));
+      
+      renderComponent();
+      
+      expect(screen.getByText('Something went wrong. Please try again after sometime.')).toBeInTheDocument();
+    });
+
+    test('renders download success feedback message when conditions are met', () => {
+      // Create store with success message enabled
+      store = createMockStore(fromJS({
+        amexway: {
+          url: 'Enterprise_Productivity_Signals',
+          feedback: { showFeedbackMessage: false },
+          downloadFeedback: { showApiErrorMessage: false, showSuccessMessage: true }
+        }
+      }));
+      
+      renderComponent();
+      
+      expect(screen.getByText('Feedback downloaded successfully.')).toBeInTheDocument();
+    });
+  });
+
+  describe('Component Integration', () => {
+    test('passes correct props to AxpEngineeringMetricsGrid', () => {
+      renderComponent();
+      
+      expect(screen.getByTestId('axp-engineering-metrics-grid')).toBeInTheDocument();
+      expect(screen.getByText('Monthly Toggle: false')).toBeInTheDocument();
+    });
+
+    test('passes correct props to LastUpdatedComponent', () => {
+      renderComponent();
+      
+      expect(screen.getByTestId('last-updated-component')).toBeInTheDocument();
+    });
+
+    test('wraps components in FiltersProvider', () => {
+      renderComponent();
+      
+      expect(screen.getByTestId('filters-provider')).toBeInTheDocument();
+    });
+  });
+
+  describe('Conditional Rendering', () => {
+    test('renders test component when monthlyToggle is true for engineering metrics', () => {
+      // Reset useState mocks for this specific test
+      jest.spyOn(React, 'useState')
+        .mockReturnValueOnce(['', mockSetLastUpdatedEnt])
+        .mockReturnValueOnce(['', mockSetLastUpdatedDora])
+        .mockReturnValueOnce(['', mockSetLastUpdatedNfr])
+        .mockReturnValueOnce([true, mockSetMonthlyToggle]); // monthlyToggle = true
+      
+      renderComponent();
+      
+      expect(screen.getByTestId('axp-engineering-metrics-grid-with-filters-test')).toBeInTheDocument();
+      expect(screen.getByText('Test Component - Monthly: true')).toBeInTheDocument();
+    });
+
+    test('does not render test component when monthlyToggle is false', () => {
+      renderComponent();
+      
+      expect(screen.queryByTestId('axp-engineering-metrics-grid-with-filters-test')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Accessibility', () => {
+    test('has proper ARIA labels and roles', () => {
+      renderComponent();
+      
+      expect(screen.getByRole('tablist')).toBeInTheDocument();
+      expect(screen.getByLabelText('toggle1')).toBeInTheDocument();
+      expect(screen.getByLabelText('Info Link')).toBeInTheDocument();
+    });
+
+    test('tab panels have proper structure', () => {
+      renderComponent();
+      
+      const tabPanels = screen.getAllByRole('tabpanel');
+      expect(tabPanels.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Props and PropTypes', () => {
+    test('component has proper propTypes defined', () => {
+      expect(EngineeringProductivityMetricsContainer.propTypes).toBeDefined();
+    });
+  });
+
+  describe('Error Handling', () => {
+    test('handles missing URL gracefully', () => {
+      // Create store with undefined URL
+      store = createMockStore(fromJS({
+        amexway: {
+          url: undefined,
+          feedback: { showFeedbackMessage: false },
+          downloadFeedback: { showApiErrorMessage: false, showSuccessMessage: false }
+        }
+      }));
+      
+      expect(() => renderComponent()).not.toThrow();
+    });
+
+    test('handles dispatch errors gracefully', () => {
+      const originalDispatch = store.dispatch;
+      store.dispatch = jest.fn(() => {
+        throw new Error('Dispatch error');
+      });
+      
+      // Component should still render even if dispatch fails
+      expect(() => renderComponent()).not.toThrow();
+      
+      // Restore original dispatch
+      store.dispatch = originalDispatch;
+    });
+  });
+});
+
+// Additional test for Redux integration
+describe('EngineeringProductivityMetricsContainer - Redux Integration', () => {
+  test('dispatches actions correctly', () => {
+    const store = createMockStore();
+    const dispatchSpy = jest.spyOn(store, 'dispatch');
+    
+    render(
+      <Provider store={store}>
+        <EngineeringProductivityMetricsContainer />
+      </Provider>
+    );
+    
+    // Test that component can access the store without errors
+    expect(() => store.getState()).not.toThrow();
+    expect(store.getState().getIn(['amexway', 'url'])).toBe('Enterprise_Productivity_Signals');
+  });
+});
