@@ -1,0 +1,103 @@
+// EngineeringProductivityMetricsContainer.spec.jsx
+
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { Provider } from 'react-redux';
+import configureStore from 'redux-mock-store';
+import EngineeringProductivityMetricsContainer from './EngineeringProductivityMetricsContainer';
+
+// Mock child components:
+jest.mock('./components/AxpEngineeringMetricsGrid', () => () => <div>MockAxpEngineeringMetricsGrid</div>);
+jest.mock('./components/AxpDoraMetricsGrid', () => () => <div>MockAxpDoraMetricsGrid</div>);
+jest.mock('./components/AxpDoraWithFilters', () => () => <div>MockAxpDoraWithFilters</div>);
+jest.mock('./components/AxpEngineeringMetricsGridWithFilters', () => () => <div>MockAxpEngineeringMetricsGridWithFilters</div>);
+jest.mock('./components/AxpEngineeringMetricsGridWithFiltersWithEb', () => () => <div>MockAxpEngineeringMetricsGridWithFiltersWithEb</div>);
+jest.mock('./components/LastUpdatedComponent', () => () => <div>MockLastUpdatedComponent</div>);
+jest.mock('./components/AxpNFRMetricsGrid', () => () => <div>MockAxpNFRMetricsGrid</div>);
+jest.mock('./components/AxpNFRMetricsGridWithFiltersWithEb', () => () => <div>MockAxpNFRMetricsGridWithFiltersWithEb</div>);
+// Mock other utilities or context as needed
+
+// Create a minimal mock Redux store
+const mockStore = configureStore([]);
+const initialState = {
+  modules: {
+    'axp-one-insight-amex-way': {
+      amexway: {
+        url: 'some_url',
+        feedback: {
+          showFeedbackMessage: false
+        },
+        downloadFeedback: {
+          showApiErrorMessage: false,
+          showSuccessMessage: false
+        }
+      }
+    }
+  }
+};
+
+describe('EngineeringProductivityMetricsContainer', () => {
+  let store;
+
+  beforeEach(() => {
+    store = mockStore(initialState);
+  });
+
+  it('renders without crashing and displays Enterprise Productivity Signals tab', () => {
+    render(
+      <Provider store={store}>
+        <EngineeringProductivityMetricsContainer />
+      </Provider>
+    );
+    expect(screen.getByText(/Enterprise Productivity Signals/i)).toBeInTheDocument();
+  });
+
+  it('toggles between main tabs (Enterprise, DORA, NFR)', () => {
+    render(
+      <Provider store={store}>
+        <EngineeringProductivityMetricsContainer />
+      </Provider>
+    );
+    // Enterprise tab content
+    expect(screen.getByText(/Enterprise Productivity Signals/i)).toBeInTheDocument();
+
+    // Simulate clicking DORA Metrics tab if your Tab implementation allows it
+    fireEvent.click(screen.getByText(/DORA Metrics/i));
+    expect(screen.getByText(/MockAxpDoraMetricsGrid/)).toBeInTheDocument();
+
+    // Simulate clicking NFR Metrics tab
+    fireEvent.click(screen.getByText(/NFR Metrics/i));
+    expect(screen.getByText(/MockAxpNFRMetricsGrid/)).toBeInTheDocument();
+  });
+
+  it('shows feedback messages when redux state changes', () => {
+    // Set up state that triggers feedback messages
+    store = mockStore({
+      modules: {
+        'axp-one-insight-amex-way': {
+          amexway: {
+            url: 'some_url',
+            feedback: { showFeedbackMessage: true },
+            downloadFeedback: {
+              showApiErrorMessage: true,
+              showSuccessMessage: true,
+            }
+          }
+        }
+      }
+    });
+
+    render(
+      <Provider store={store}>
+        <EngineeringProductivityMetricsContainer />
+      </Provider>
+    );
+
+    // Assert messages based on your implementation
+    expect(screen.queryByText(/Feedback successfully submitted/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Something went wrong/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Feedback downloaded successfully/i)).toBeInTheDocument();
+  });
+
+  // Add more tests for switches, filters, etc. as required.
+});
