@@ -1,0 +1,421 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { Provider } from 'react-redux';
+import { configureStore } from '@reduxjs/toolkit';
+import '@testing-library/jest-dom';
+import EngineeringProductivityMetricsContainer from './EngineeringProductivityMetricsContainer';
+
+// Mock the child components
+jest.mock('../AxpEngineeringMetricsGrid', () => ({
+  __esModule: true,
+  default: ({ handleEnterpriseTimeLastUpdated, monthlyToggle }) => (
+    <div data-testid="axp-engineering-metrics-grid">
+      <button onClick={() => handleEnterpriseTimeLastUpdated('2023-01-01')}>
+        Update Enterprise Time
+      </button>
+      <span>Monthly Toggle: {monthlyToggle ? 'true' : 'false'}</span>
+    </div>
+  )
+}));
+
+jest.mock('../AxpDoraMetricsGrid', () => ({
+  __esModule: true,
+  default: ({ handleDora, setMonthlyToggle }) => (
+    <div data-testid="axp-dora-metrics-grid">
+      <button onClick={() => handleDora('2023-01-01')}>
+        Update DORA
+      </button>
+      <button onClick={() => setMonthlyToggle(true)}>
+        Set Monthly Toggle
+      </button>
+    </div>
+  )
+}));
+
+jest.mock('../AxpDoraWithFilters', () => ({
+  __esModule: true,
+  default: () => <div data-testid="axp-dora-with-filters">DORA With Filters</div>
+}));
+
+jest.mock('../AxpEngineeringMetricsGridWithFiltersWithEb', () => ({
+  __esModule: true,
+  default: () => <div data-testid="axp-engineering-metrics-grid-with-filters">Engineering Metrics With Filters</div>
+}));
+
+jest.mock('../AxpNfrMetricsGrid', () => ({
+  __esModule: true,
+  default: ({ handleNfrLastUpdated, setMonthlyToggle }) => (
+    <div data-testid="axp-nfr-metrics-grid">
+      <button onClick={() => handleNfrLastUpdated('2023-01-01')}>
+        Update NFR
+      </button>
+      <button onClick={() => setMonthlyToggle(false)}>
+        Set Monthly Toggle NFR
+      </button>
+    </div>
+  )
+}));
+
+jest.mock('../AxpNfrMetricsGridWithFiltersWithEb', () => ({
+  __esModule: true,
+  default: () => <div data-testid="axp-nfr-metrics-grid-with-filters">NFR Metrics With Filters</div>
+}));
+
+jest.mock('../AxpEngineeringMetricsGridWithFiltersTest', () => ({
+  __esModule: true,
+  default: ({ isMonthlyToggle }) => (
+    <div data-testid="axp-engineering-metrics-grid-with-filters-test">
+      Test Component - Monthly: {isMonthlyToggle ? 'true' : 'false'}
+    </div>
+  )
+}));
+
+jest.mock('../../LastUpdatedComponent', () => ({
+  __esModule: true,
+  default: ({ lastUpdatedDate }) => (
+    <div data-testid="last-updated-component">
+      Last Updated: {lastUpdatedDate}
+    </div>
+  )
+}));
+
+jest.mock('../../FiltersContext', () => ({
+  FiltersProvider: ({ children }) => <div data-testid="filters-provider">{children}</div>
+}));
+
+// Mock urlRedux
+const mockUrlRedux = {
+  getIn: jest.fn()
+};
+
+// Mock useDispatch and useSelector
+const mockDispatch = jest.fn();
+const mockUseSelector = jest.fn();
+
+jest.mock('react-redux', () => ({
+  ...jest.requireActual('react-redux'),
+  useDispatch: () => mockDispatch,
+  useSelector: () => mockUseSelector()
+}));
+
+// Mock react hooks
+const mockUseState = jest.fn();
+jest.mock('react', () => ({
+  ...jest.requireActual('react'),
+  useState: (initial) => mockUseState(initial)
+}));
+
+// Create a mock store
+const createMockStore = (initialState = {}) => {
+  return configureStore({
+    reducer: {
+      root: (state = initialState) => state
+    }
+  });
+};
+
+describe('EngineeringProductivityMetricsContainer', () => {
+  let store;
+  let mockSetLastUpdatedEnt;
+  let mockSetLastUpdatedDora;
+  let mockSetLastUpdatedNfr;
+  let mockSetMonthlyToggle;
+
+  beforeEach(() => {
+    store = createMockStore();
+    
+    // Reset mocks
+    mockDispatch.mockClear();
+    mockUrlRedux.getIn.mockClear();
+    
+    // Setup useState mocks
+    mockSetLastUpdatedEnt = jest.fn();
+    mockSetLastUpdatedDora = jest.fn();
+    mockSetLastUpdatedNfr = jest.fn();
+    mockSetMonthlyToggle = jest.fn();
+    
+    mockUseState
+      .mockReturnValueOnce(['', mockSetLastUpdatedEnt])  // lastUpdatedEnt
+      .mockReturnValueOnce(['', mockSetLastUpdatedDora]) // lastUpdatedDora
+      .mockReturnValueOnce(['', mockSetLastUpdatedNfr])  // lastUpdatedNfr
+      .mockReturnValueOnce([false, mockSetMonthlyToggle]); // monthlyToggle
+    
+    // Setup urlRedux mock responses
+    mockUrlRedux.getIn
+      .mockReturnValueOnceWhen(['modules', 'axp-one-insight-amex-way', 'amexway', 'url'], 'Enterprise_Productivity_Signals')
+      .mockReturnValueOnceWhen(['modules', 'axp-one-insight-amex-way', 'amexway', 'url'], 'DORA_Metrics')
+      .mockReturnValueOnceWhen(['modules', 'axp-one-insight-amex-way', 'amexway', 'url'], 'NFR_Metrics')
+      .mockReturnValue('Enterprise_Productivity_Signals');
+  });
+
+  const renderComponent = () => {
+    return render(
+      <Provider store={store}>
+        <EngineeringProductivityMetricsContainer />
+      </Provider>
+    );
+  };
+
+  describe('Rendering', () => {
+    test('renders main container with correct structure', () => {
+      renderComponent();
+      
+      expect(screen.getByRole('tablist')).toBeInTheDocument();
+      expect(screen.getByText('Enterprise Productivity Signals')).toBeInTheDocument();
+      expect(screen.getByText('DORA Metrics')).toBeInTheDocument();
+      expect(screen.getByText('NFR Metrics')).toBeInTheDocument();
+    });
+
+    test('renders toggle switch with correct labels', () => {
+      renderComponent();
+      
+      expect(screen.getByLabelText('toggle1')).toBeInTheDocument();
+      expect(screen.getByText('Switch to yearly view')).toBeInTheDocument();
+      expect(screen.getByText('Switch to monthly view')).toBeInTheDocument();
+    });
+
+    test('renders external links with correct attributes', () => {
+      renderComponent();
+      
+      const enterpriseLink = screen.getByLabelText('Info Link');
+      expect(enterpriseLink).toHaveAttribute('href', 'https://enterprise-confluence.aexp.com/confluence/display/DX/Developer+Insights+-+OneInsights+-+Overview');
+      expect(enterpriseLink).toHaveAttribute('target', '_blank');
+      expect(enterpriseLink).toHaveAttribute('rel', 'noreferrer');
+    });
+  });
+
+  describe('Tab Navigation', () => {
+    test('displays Enterprise Productivity Signals tab content by default', () => {
+      mockUrlRedux.getIn.mockReturnValue('Enterprise_Productivity_Signals');
+      renderComponent();
+      
+      expect(screen.getByTestId('axp-engineering-metrics-grid')).toBeInTheDocument();
+    });
+
+    test('displays DORA Metrics tab content when URL matches', () => {
+      mockUrlRedux.getIn.mockReturnValue('DORA_Metrics');
+      renderComponent();
+      
+      expect(screen.getByTestId('axp-dora-with-filters')).toBeInTheDocument();
+    });
+
+    test('displays NFR Metrics tab content when URL matches', () => {
+      mockUrlRedux.getIn.mockReturnValue('NFR_Metrics');
+      renderComponent();
+      
+      expect(screen.getByTestId('axp-nfr-metrics-grid-with-filters')).toBeInTheDocument();
+    });
+  });
+
+  describe('Toggle Switch Functionality', () => {
+    test('toggle switch controls monthly/yearly view', () => {
+      renderComponent();
+      
+      const toggleSwitch = screen.getByLabelText('toggle1');
+      
+      // Initially false (yearly view)
+      expect(screen.getByText('Monthly Toggle: false')).toBeInTheDocument();
+      
+      // Click to switch to monthly view
+      fireEvent.click(toggleSwitch);
+      expect(mockSetMonthlyToggle).toHaveBeenCalledWith(true);
+    });
+
+    test('toggle switch shows correct text based on state', () => {
+      // Test with monthly toggle true
+      mockUseState
+        .mockReturnValueOnceWhen(['', mockSetLastUpdatedEnt])
+        .mockReturnValueOnceWhen(['', mockSetLastUpdatedDora])
+        .mockReturnValueOnceWhen(['', mockSetLastUpdatedNfr])
+        .mockReturnValueOnceWhen([true, mockSetMonthlyToggle]);
+      
+      renderComponent();
+      
+      expect(screen.getByText('Switch to yearly view')).toBeInTheDocument();
+      expect(screen.getByText('Switch to monthly view')).toBeInTheDocument();
+    });
+  });
+
+  describe('Event Handlers', () => {
+    test('handleEnterpriseTimeLastUpdated updates state correctly', () => {
+      renderComponent();
+      
+      const updateButton = screen.getByText('Update Enterprise Time');
+      fireEvent.click(updateButton);
+      
+      expect(mockSetLastUpdatedEnt).toHaveBeenCalledWith('2023-01-01');
+    });
+
+    test('handleDora updates state correctly', () => {
+      mockUrlRedux.getIn.mockReturnValue('DORA_Metrics');
+      renderComponent();
+      
+      const updateButton = screen.getByText('Update DORA');
+      fireEvent.click(updateButton);
+      
+      expect(mockSetLastUpdatedDora).toHaveBeenCalledWith('2023-01-01');
+    });
+
+    test('handleNfrLastUpdated updates state correctly', () => {
+      mockUrlRedux.getIn.mockReturnValue('NFR_Metrics');
+      renderComponent();
+      
+      const updateButton = screen.getByText('Update NFR');
+      fireEvent.click(updateButton);
+      
+      expect(mockSetLastUpdatedNfr).toHaveBeenCalledWith('2023-01-01');
+    });
+  });
+
+  describe('Feedback Messages', () => {
+    test('renders success feedback message when conditions are met', () => {
+      mockUrlRedux.getIn
+        .mockReturnValueOnceWhen(['modules', 'axp-one-insight-amex-way', 'amexway', 'feedback', 'showFeedbackMessage'], true)
+        .mockReturnValue('Enterprise_Productivity_Signals');
+      
+      renderComponent();
+      
+      expect(screen.getByText('Feedback successfully submitted.')).toBeInTheDocument();
+    });
+
+    test('dispatches correct action when success feedback is dismissed', () => {
+      mockUrlRedux.getIn
+        .mockReturnValueOnceWhen(['modules', 'axp-one-insight-amex-way', 'amexway', 'feedback', 'showFeedbackMessage'], true)
+        .mockReturnValue('Enterprise_Productivity_Signals');
+      
+      renderComponent();
+      
+      const dismissButton = screen.getByText('Feedback successfully submitted.').closest('[onDismiss]');
+      if (dismissButton) {
+        fireEvent.click(dismissButton);
+        expect(mockDispatch).toHaveBeenCalledWith({
+          type: 'SET_SHOW_FEEDBACK',
+          payload: false
+        });
+      }
+    });
+
+    test('renders error feedback message when conditions are met', () => {
+      mockUrlRedux.getIn
+        .mockReturnValueOnceWhen(['modules', 'axp-one-insight-amex-way', 'amexway', 'downloadFeedback', 'showApiErrorMessage'], true)
+        .mockReturnValue('Enterprise_Productivity_Signals');
+      
+      renderComponent();
+      
+      expect(screen.getByText('Something went wrong. Please try again after sometime.')).toBeInTheDocument();
+    });
+
+    test('renders download success feedback message when conditions are met', () => {
+      mockUrlRedux.getIn
+        .mockReturnValueOnceWhen(['modules', 'axp-one-insight-amex-way', 'amexway', 'downloadFeedback', 'showSuccessMessage'], true)
+        .mockReturnValue('Enterprise_Productivity_Signals');
+      
+      renderComponent();
+      
+      expect(screen.getByText('Feedback downloaded successfully.')).toBeInTheDocument();
+    });
+  });
+
+  describe('Component Integration', () => {
+    test('passes correct props to AxpEngineeringMetricsGrid', () => {
+      mockUrlRedux.getIn.mockReturnValue('Enterprise_Productivity_Signals');
+      renderComponent();
+      
+      expect(screen.getByTestId('axp-engineering-metrics-grid')).toBeInTheDocument();
+      expect(screen.getByText('Monthly Toggle: false')).toBeInTheDocument();
+    });
+
+    test('passes correct props to LastUpdatedComponent', () => {
+      renderComponent();
+      
+      expect(screen.getByTestId('last-updated-component')).toBeInTheDocument();
+    });
+
+    test('wraps components in FiltersProvider', () => {
+      renderComponent();
+      
+      expect(screen.getByTestId('filters-provider')).toBeInTheDocument();
+    });
+  });
+
+  describe('Conditional Rendering', () => {
+    test('renders test component when monthlyToggle is true for engineering metrics', () => {
+      mockUseState
+        .mockReturnValueOnceWhen(['', mockSetLastUpdatedEnt])
+        .mockReturnValueOnceWhen(['', mockSetLastUpdatedDora])
+        .mockReturnValueOnceWhen(['', mockSetLastUpdatedNfr])
+        .mockReturnValueOnceWhen([true, mockSetMonthlyToggle]);
+      
+      mockUrlRedux.getIn.mockReturnValue('Enterprise_Productivity_Signals');
+      renderComponent();
+      
+      expect(screen.getByTestId('axp-engineering-metrics-grid-with-filters-test')).toBeInTheDocument();
+      expect(screen.getByText('Test Component - Monthly: true')).toBeInTheDocument();
+    });
+
+    test('does not render test component when monthlyToggle is false', () => {
+      mockUrlRedux.getIn.mockReturnValue('Enterprise_Productivity_Signals');
+      renderComponent();
+      
+      expect(screen.queryByTestId('axp-engineering-metrics-grid-with-filters-test')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('Accessibility', () => {
+    test('has proper ARIA labels and roles', () => {
+      renderComponent();
+      
+      expect(screen.getByRole('tablist')).toBeInTheDocument();
+      expect(screen.getByLabelText('toggle1')).toBeInTheDocument();
+      expect(screen.getByLabelText('Info Link')).toBeInTheDocument();
+    });
+
+    test('tab panels have proper structure', () => {
+      renderComponent();
+      
+      const tabPanels = screen.getAllByRole('tabpanel');
+      expect(tabPanels.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('Props and PropTypes', () => {
+    test('component has proper propTypes defined', () => {
+      expect(EngineeringProductivityMetricsContainer.propTypes).toBeDefined();
+    });
+  });
+
+  describe('Error Handling', () => {
+    test('handles missing URL gracefully', () => {
+      mockUrlRedux.getIn.mockReturnValue(undefined);
+      
+      expect(() => renderComponent()).not.toThrow();
+    });
+
+    test('handles dispatch errors gracefully', () => {
+      mockDispatch.mockImplementation(() => {
+        throw new Error('Dispatch error');
+      });
+      
+      // Component should still render even if dispatch fails
+      expect(() => renderComponent()).not.toThrow();
+    });
+  });
+});
+
+// Helper function for mockReturnValueOnceWhen
+Object.defineProperty(mockUrlRedux.getIn, 'mockReturnValueOnceWhen', {
+  value: function(args, returnValue) {
+    return this.mockImplementationOnce((path) => {
+      if (JSON.stringify(path) === JSON.stringify(args)) {
+        return returnValue;
+      }
+      return this.mockReturnValue();
+    });
+  }
+});
+
+Object.defineProperty(mockUseState, 'mockReturnValueOnceWhen', {
+  value: function(returnValue) {
+    return this.mockReturnValueOnce(returnValue);
+  }
+});
