@@ -1,0 +1,29 @@
+import { getExpandedColumns } from './AxpEngineeringMetricsGrid.helpers';
+
+test('getExpandedColumns returns correct column array', () => {
+  const headerObj = { name: 'Name', amount: 'Amount' };
+  const result = getExpandedColumns(headerObj, mockSortData);
+  expect(result).toEqual([
+    { text: 'Name', dataField: 'name', sort: true, sortFunc: mockSortData },
+    { text: 'Amount', dataField: 'amount', sort: true, sortFunc: false },
+  ]);
+});
+    jest.mock('@americanexpress/cornerstone-table', () => {
+  const MockCornerstoneTable = ({ columns = [], data = [] }) => (
+    <table data-testid="data-table">
+      <thead>
+        <tr>
+          {columns.map(col => <th key={col.dataField}>{col.text}</th>)}
+        </tr>
+      </thead>
+      <tbody>
+        {data.map((row, idx) => (
+          <tr key={idx}>
+            {columns.map(col => <td key={col.dataField}>{row[col.dataField]}</td>)}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+  return MockCornerstoneTable;
+});
