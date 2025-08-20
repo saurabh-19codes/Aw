@@ -1,29 +1,84 @@
-import { getExpandedColumns } from './AxpEngineeringMetricsGrid.helpers';
+jest.mock('@americanexpress/cornerstone-table', () => {
+  // columns: [{ dataField, text }]
+  // data: [{ ... }]
+  // expandRow: { renderer: (row) => ReactNode }
+  // keyField: string (e.g., "kpi")
 
-test('getExpandedColumns returns correct column array', () => {
-  const headerObj = { name: 'Name', amount: 'Amount' };
-  const result = getExpandedColumns(headerObj, mockSortData);
-  expect(result).toEqual([
-    { text: 'Name', dataField: 'name', sort: true, sortFunc: mockSortData },
-    { text: 'Amount', dataField: 'amount', sort: true, sortFunc: false },
-  ]);
-});
-    jest.mock('@americanexpress/cornerstone-table', () => {
-  const MockCornerstoneTable = ({ columns = [], data = [] }) => (
+  const MockCornerstoneTable = ({
+    columns = [],
+    data = [],
+    keyField,
+    expandRow,
+  }) => (
     <table data-testid="data-table">
       <thead>
         <tr>
-          {columns.map(col => <th key={col.dataField}>{col.text}</th>)}
+          {columns.map((col) => (
+            <th key={col.dataField}>{col.text}</th>
+          ))}
         </tr>
       </thead>
       <tbody>
         {data.map((row, idx) => (
-          <tr key={idx}>
-            {columns.map(col => <td key={col.dataField}>{row[col.dataField]}</td>)}
-          </tr>
+          <React.Fragment key={row[keyField] || idx}>
+            <tr>
+              {columns.map((col) => (
+                <td key={col.dataField}>{row[col.dataField]}</td>
+              ))}
+            </tr>
+            {expandRow && expandRow.renderer && (
+              <tr data-testid="expand-row">
+                <td colSpan={columns.length}>{expandRow.renderer(row)}</td>
+              </tr>
+            )}
+          </React.Fragment>
         ))}
       </tbody>
     </table>
   );
   return MockCornerstoneTable;
+});
+
+
+
+it('renders expanded row with drillDown data from getExpandedColumns', () => {
+  // Sample headers and drillDown data
+  const amexWayDrillDownHeader = { name: 'Name', amount: 'Amount' };
+  const amexWayApiData = [
+    {
+      kpi: 'row1',
+      drillDown: [
+        { name: 'Item 1', amount: 10 },
+        { name: 'Item 2', amount: 20 },
+      ]
+    }
+  ];
+
+  useFetchye.mockReturnValue({
+    isLoading: false,
+    data: {
+      body: {
+        amexWayApiData,
+        amexWayDrillDownHeader,
+        amexWayHeader: ['kpi'],
+      }
+    }
+  });
+
+  render(<AxpEngineeringMetricsGrid {...props} />);
+
+  // Check main data table rendered the kpi
+  const dataTable = screen.getByTestId('data-table');
+  expect(dataTable).toBeInTheDocument();
+  expect(dataTable).toHaveTextContent('row1'); // main row
+
+  // Check expanded row exists
+  const expandRow = screen.getByTestId('expand-row');
+  expect(expandRow).toBeInTheDocument();
+  expect(expandRow).toHaveTextContent('Name');
+  expect(expandRow).toHaveTextContent('Amount');
+  expect(expandRow).toHaveTextContent('Item 1');
+  expect(expandRow).toHaveTextContent('Item 2');
+  expect(expandRow).toHaveTextContent('10');
+  expect(expandRow).toHaveTextContent('20');
 });
