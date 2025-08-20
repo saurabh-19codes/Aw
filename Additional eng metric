@@ -11,6 +11,108 @@ import {
   SET_SHOW_FEEDBACK_DOWNLOAD_SUCCESS_MSG
 } from '.../reducer';
 
+// Mock children as before
+
+const mockStore = configureStore([]);
+const urlsToTest = ['Enterprise_Productivity_Signals', 'DORA_Metrics'];
+
+describe('EngineeringProductivityMetricsContainer feedback dismissals across urls', () => {
+  it.each(urlsToTest)('dispatches SET_SHOW_FEEDBACK when feedback message is dismissed (url=%s)', (testUrl) => {
+    const initialState = fromJS({
+      modules: {
+        'axp-one-insight-amex-way': {
+          amexway: {
+            url: testUrl,
+            feedback: { showFeedbackMessage: true },
+            downloadFeedback: { showApiErrorMessage: false, showSuccessMessage: false }
+          }
+        }
+      }
+    });
+    const store = mockStore(initialState);
+    render(
+      <Provider store={store}>
+        <FiltersProvider>
+          <EngineeringProductivityMetricsContainer />
+        </FiltersProvider>
+      </Provider>
+    );
+    // Find feedback message dismiss button and click
+    const dismissBtn = screen.getByRole('button', { name: /close/i }); // Update as per markup
+    fireEvent.click(dismissBtn);
+    const actions = store.getActions();
+    expect(actions).toContainEqual({ type: SET_SHOW_FEEDBACK, payload: false });
+  });
+
+  it.each(urlsToTest)('dispatches SET_SHOW_API_DOWNLOAD_ERROR when download error message is dismissed (url=%s)', (testUrl) => {
+    const initialState = fromJS({
+      modules: {
+        'axp-one-insight-amex-way': {
+          amexway: {
+            url: testUrl,
+            feedback: { showFeedbackMessage: false },
+            downloadFeedback: { showApiErrorMessage: true, showSuccessMessage: false }
+          }
+        }
+      }
+    });
+    const store = mockStore(initialState);
+    render(
+      <Provider store={store}>
+        <FiltersProvider>
+          <EngineeringProductivityMetricsContainer />
+        </FiltersProvider>
+      </Provider>
+    );
+    const dismissBtn = screen.getByRole('button', { name: /close/i }); // Update as per markup
+    fireEvent.click(dismissBtn);
+    const actions = store.getActions();
+    expect(actions).toContainEqual({ type: SET_SHOW_API_DOWNLOAD_ERROR, payload: false });
+  });
+
+  it.each(urlsToTest)('dispatches SET_SHOW_FEEDBACK_DOWNLOAD_SUCCESS_MSG when download success dismissed (url=%s)', (testUrl) => {
+    const initialState = fromJS({
+      modules: {
+        'axp-one-insight-amex-way': {
+          amexway: {
+            url: testUrl,
+            feedback: { showFeedbackMessage: false },
+            downloadFeedback: { showApiErrorMessage: false, showSuccessMessage: true }
+          }
+        }
+      }
+    });
+    const store = mockStore(initialState);
+    render(
+      <Provider store={store}>
+        <FiltersProvider>
+          <EngineeringProductivityMetricsContainer />
+        </FiltersProvider>
+      </Provider>
+    );
+    const dismissBtn = screen.getByRole('button', { name: /close/i }); // Update as per markup
+    fireEvent.click(dismissBtn);
+    const actions = store.getActions();
+    expect(actions).toContainEqual({ type: SET_SHOW_FEEDBACK_DOWNLOAD_SUCCESS_MSG, payload: false });
+  });
+});
+
+
+
+==/=====================================
+import React from 'react';
+import { render, screen, fireEvent } from '@testing-library/react';
+import { Provider } from 'react-redux';
+import configureStore from 'redux-mock-store';
+import { fromJS } from 'immutable';
+import EngineeringProductivityMetricsContainer from '.../EngineeringProductivityMetricsContainer';
+import { FiltersProvider } from '.../FiltersContext';
+import {
+  SET_SHOW_FEEDBACK,
+  SET_SHOW_API_DOWNLOAD_ERROR,
+  SET_SHOW_FEEDBACK_DOWNLOAD_SUCCESS_MSG
+} from '.../reducer';
+
 // Mock children as in your current approach
 
 const mockStore = configureStore([]);
