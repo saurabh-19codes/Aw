@@ -1,0 +1,108 @@
+   jest.mock('@americanexpress/cornerstone-table', () => {
+  // Accept props: columns, data, keyField, expandRow, expandByColumnOnly, etc.
+  // This mock renders one main table and, for each data row, renders a per-row expanded table if expandRow exists.
+
+  const MockCornerstoneTable = ({
+    columns = [],
+    data = [],
+    keyField = 'id',
+    expandRow,
+    tableType = 'main',
+  }) => (
+    <div>
+      <table data-testid={`data-table-${tableType}`}>
+        <thead>
+          <tr>
+            {columns.map(col => (
+              <th key={col.dataField}>{col.text}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {data.map((row, idx) => (
+            <React.Fragment key={row[keyField] || idx}>
+              <tr>
+                {columns.map(col => (
+                  <td key={col.dataField}>{row[col.dataField]}</td>
+                ))}
+              </tr>
+              {expandRow && expandRow.renderer && (
+                <tr>
+                  <td colSpan={columns.length} data-testid={`expand-row-${idx}`}>
+                    {/* Nested table as expanded content */}
+                    <table data-testid={`data-table-expanded-${idx}`}>
+                      <thead>
+                        <tr>
+                          {expandRow?.columns?.map(col => (
+                            <th key={col.dataField}>{col.text}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {row.drillDown &&
+                          row.drillDown.map((drill, dIdx) => (
+                            <tr key={dIdx}>
+                              {expandRow?.columns?.map(col => (
+                                <td key={col.dataField}>{drill[col.dataField]}</td>
+                              ))}
+                            </tr>
+                          ))}
+                      </tbody>
+                    </table>
+                  </td>
+                </tr>
+              )}
+            </React.Fragment>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+  return MockCornerstoneTable;
+});
+        it('renders main table and expanded drillDown tables for each row', () => {
+  const amexWayDrillDownHeader = { name: 'Name', amount: 'Amount' };
+  const amexWayApiData = [
+    {
+      kpi: 'row1',
+      drillDown: [
+        { name: 'Drill1', amount: 5 },
+        { name: 'Drill2', amount: 10 }
+      ]
+    },
+    {
+      kpi: 'row2',
+      drillDown: [
+        { name: 'DrillA', amount: 9 }
+      ]
+    }
+  ];
+
+  useFetchye.mockReturnValue({
+    isLoading: false,
+    data: {
+      body: {
+        amexWayApiData,
+        amexWayDrillDownHeader,
+        amexWayHeader: ['kpi'],
+      }
+    }
+  });
+
+  render(<AxpEngineeringMetricsGrid {...props} />);
+
+  // Main table only
+  expect(screen.getByTestId('data-table-main')).toBeInTheDocument();
+  // Expanded tables for each row
+  expect(screen.getByTestId('data-table-expanded-0')).toBeInTheDocument();
+  expect(screen.getByTestId('data-table-expanded-1')).toBeInTheDocument();
+
+  // Main table has main rows' kpi
+  expect(screen.getByTestId('data-table-main')).toHaveTextContent('row1');
+  expect(screen.getByTestId('data-table-main')).toHaveTextContent('row2');
+
+  // Expanded rows have drilldown data
+  expect(screen.getByTestId('data-table-expanded-0')).toHaveTextContent('Drill1');
+  expect(screen.getByTestId('data-table-expanded-0')).toHaveTextContent('Drill2');
+  expect(screen.getByTestId('data-table-expanded-1')).toHaveTextContent('DrillA');
+});
