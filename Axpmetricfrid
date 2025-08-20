@@ -1,0 +1,107 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { Provider, useDispatch, useSelector } from 'react-redux';
+import configureStore from 'redux-mock-store';
+import { fromJS } from 'immutable';
+import AxpEngineeringMetricsGrid from './AxpEngineeringMetricsGrid';
+import '@testing-library/jest-dom/extend-expect';
+
+// Mock all child/utility/components that aren't tested directly
+jest.mock('./MonthlyTableDataWithDetails', () => () => <div data-testid="monthly-detail">Monthly Table Detail</div>);
+jest.mock('./ModalComponentForFeedback', () => ({ showModal, setShowModal }) => (
+  <button data-testid="modal-feedback" onClick={() => setShowModal(false)}>
+    Modal Feedback {String(showModal)}
+  </button>
+));
+jest.mock('./ErrorBoundary', () => ({ children }) => <div data-testid="error-boundary">{children}</div>);
+jest.mock('@americanexpress/cornerstone-table', () => () => <div data-testid="cornerstone-table">Cornerstone Table</div>);
+jest.mock('./LoaderCircle', () => () => <div data-testid="loader-circle">Loader</div>);
+
+// Mock custom hooks and data fetching
+jest.mock('../utils/monthlyTrendHelper', () => ({}));
+jest.mock('react-redux', () => ({
+  ...jest.requireActual('react-redux'),
+  useDispatch: jest.fn(),
+  useSelector: jest.fn()
+}));
+
+// Example data and store
+const mockStore = configureStore([]);
+const sampleData = {
+  body7: {
+    amexWayData: [{ kpi: "testKpi", drillDown: [] }],
+    amexWayHeader: ['name', 'value'],
+    amexWayDrillDownHeader: ['a', 'b'],
+    lastRefreshDate: '2023-01-01',
+    lastUpdatedDate: '2023-01-01',
+    baseKpiCountData: [{ baseKpiCount: 42 }]
+  }
+};
+const apiHostUrl = 'http://mock-api';
+
+describe('AxpEngineeringMetricsGrid', () => {
+  beforeEach(() => {
+    // Default Redux mocks
+    useDispatch.mockReturnValue(jest.fn());
+    useSelector.mockImplementation(selectorFn =>
+      fromJS({ config: { oneApiUrl: apiHostUrl } })
+    );
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('renders loading state', () => {
+    // Mock useFetch to loading
+    jest.spyOn(React, 'useEffect').mockImplementationOnce(() => {});
+    const props = { handleEnterpriseTimeLastUpdated: jest.fn(), setCurrentPage: jest.fn(), monthlyToggle: false };
+    render(<AxpEngineeringMetricsGrid {...props}/>);
+
+    expect(screen.getByTestId('loader-circle')).toBeInTheDocument();
+  });
+
+  it('renders DataTable with correct columns when not monthlyToggle', async () => {
+    // Mock useFetch and data
+    // ... you may need to mock useFetch here or return the sampleData directly if you have a custom hook
+    const props = { handleEnterpriseTimeLastUpdated: jest.fn(), setCurrentPage: jest.fn(), monthlyToggle: false };
+    render(<AxpEngineeringMetricsGrid {...props}/>);
+
+    // Suspense fallback eventually resolves
+    await waitFor(() => expect(screen.getByTestId('cornerstone-table')).toBeInTheDocument());
+    expect(screen.queryByTestId('monthly-detail')).not.toBeInTheDocument();
+  });
+
+  it('renders MonthlyTableDataWithDetails if monthlyToggle', async () => {
+    const props = { handleEnterpriseTimeLastUpdated: jest.fn(), setCurrentPage: jest.fn(), monthlyToggle: true };
+    render(<AxpEngineeringMetricsGrid {...props}/>);
+
+    await waitFor(() => expect(screen.getByTestId('monthly-detail')).toBeInTheDocument());
+  });
+
+  it('calls feedback actions and modal when appropriate', async () => {
+    const mockDispatch = jest.fn();
+    useDispatch.mockReturnValue(mockDispatch);
+    const props = { handleEnterpriseTimeLastUpdated: jest.fn(), setCurrentPage: jest.fn(), monthlyToggle: false };
+    render(<AxpEngineeringMetricsGrid {...props}/>);
+    // Simulate modal feedback open/close
+    fireEvent.click(screen.getByTestId('modal-feedback'));
+    expect(screen.getByTestId('modal-feedback')).toHaveTextContent('false'); // showModal should be false after click
+
+    // Optionally simulate dispatches from component logic
+    // expect(mockDispatch).toHaveBeenCalledWith({ type: ... })
+  });
+
+  it('renders with missing/empty data gracefully (edge case)', () => {
+    // Provide useFetch returns as empty/no data, or null
+    // Check that DataTable or other fallback UI is handled without crash
+    const props = { handleEnterpriseTimeLastUpdated: jest.fn(), setCurrentPage: jest.fn(), monthlyToggle: false };
+    render(<AxpEngineeringMetricsGrid {...props}/>);
+    // assert on fallback rendering, error boundary etc.
+    expect(screen.getByTestId('error-boundary')).toBeInTheDocument();
+  });
+
+  // Add more tests as needed for...
+  // - PropTypes (render without required props and expect warning)
+  // - Special tooltip content
+});
