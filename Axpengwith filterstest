@@ -1,0 +1,105 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import AxpEngineeringMetricsGridWithFiltersTest from '../AxpEngineeringMetricsGridWithFiltersTest';
+// ...your mocking setup
+
+describe('AxpEngineeringMetricsGridWithFiltersTest extra coverage', () => {
+  // Test for Line 55: exportToCSV empty and non-empty body
+  it('calls exportToCSV with [{}] when exportData.body is empty', async () => {
+    const mockExportToCSV = jest.fn();
+    jest.spyOn(require('../util/enterpriseHelper'), 'exportToCSV').mockImplementation(mockExportToCSV);
+
+    // Mock useFetche to return empty body when exporting
+    require('fetche').useFetche.mockReturnValue({
+      isLoading: false,
+      data: { body: [] },
+      run: jest.fn(),
+    });
+
+    render(<AxpEngineeringMetricsGridWithFiltersTest isMonthlyToggle={true} />);
+    // Simulate VP present and filter applied to enable Export
+    fireEvent.click(screen.getByTestId('vp-present-button'));
+    fireEvent.click(screen.getByTestId('apply-filter-button'));
+
+    // Click export
+    fireEvent.click(screen.getByTestId('btnExport'));
+    await waitFor(() => {
+      expect(mockExportToCSV).toHaveBeenCalledWith([{}], 'export_count');
+    });
+  });
+
+  it('calls exportToCSV with data when exportData.body is not empty', async () => {
+    const mockExportToCSV = jest.fn();
+    jest.spyOn(require('../util/enterpriseHelper'), 'exportToCSV').mockImplementation(mockExportToCSV);
+
+    require('fetche').useFetche.mockReturnValue({
+      isLoading: false,
+      data: { body: [{ id: 1 }] },
+      run: jest.fn(),
+    });
+
+    render(<AxpEngineeringMetricsGridWithFiltersTest isMonthlyToggle={true} />);
+    fireEvent.click(screen.getByTestId('vp-present-button'));
+    fireEvent.click(screen.getByTestId('apply-filter-button'));
+    fireEvent.click(screen.getByTestId('btnExport'));
+
+    await waitFor(() => {
+      expect(mockExportToCSV).toHaveBeenCalledWith([{ id: 1 }], 'export_count');
+    });
+  });
+
+  // Test for Lines 61,62: downloadExcel (loadExportData and setIsExportClicked)
+  it('calls loadExportData and sets isExportClicked when downloadExcel is triggered', async () => {
+    const mockLoadExportData = jest.fn();
+    require('fetche').useFetche.mockReturnValue({
+      isLoading: false,
+      data: { body: [{ id: 2 }] },
+      run: mockLoadExportData,
+    });
+
+    render(<AxpEngineeringMetricsGridWithFiltersTest isMonthlyToggle={true} />);
+    fireEvent.click(screen.getByTestId('vp-present-button'));
+    fireEvent.click(screen.getByTestId('apply-filter-button'));
+    // Click export to trigger downloadExcel
+    fireEvent.click(screen.getByTestId('btnExport'));
+    expect(mockLoadExportData).toHaveBeenCalled();
+    // Optionally, check if 'Downloading' appears, indicating isExportClicked
+    expect(await screen.findByText(/Downloading/)).toBeInTheDocument();
+  });
+
+  // Test for Lines 67-68: handleDirectorPresentDataFromChild
+  it('sets director present state and resets filter on onDirectorPresent change', () => {
+    render(<AxpEngineeringMetricsGridWithFiltersTest isMonthlyToggle={true} />);
+    // Click director present button
+    fireEvent.click(screen.getByTestId('director-present-button'));
+    // Add assertions:
+    // - If state is exposed for testing, check isDirPresentFromChild === true
+    // Otherwise, ensure export remains disabled (since VP required)
+    const exportBtn = screen.getByTestId('btnExport');
+    expect(exportBtn).toBeDisabled();
+    // Optionally, check for any state-exposing dummy elements if added for test only
+  });
+
+  // Test for Lines 87-88: handleResetFilter
+  it('resets filter and disables export when reset filter is clicked', () => {
+    render(<AxpEngineeringMetricsGridWithFiltersTest isMonthlyToggle={true} />);
+    fireEvent.click(screen.getByTestId('vp-present-button'));
+    fireEvent.click(screen.getByTestId('apply-filter-button'));
+    fireEvent.click(screen.getByTestId('reset-filter-button'));
+    // After reset, Export should be disabled
+    const exportBtn = screen.getByTestId('btnExport');
+    expect(exportBtn).toBeDisabled();
+  });
+
+  // Test for Line 105: isMetricDownloadLoading / success message
+  it('shows metric download message when isMetricDownloadLoading is true', () => {
+    // Simulate state for metric download loading (could pass as prop, or mock useState)
+    render(<AxpEngineeringMetricsGridWithFiltersTest isMonthlyToggle={true} />);
+    // Fire actions to set isMetricDownloadLoading (by export and ensure flag set)
+    fireEvent.click(screen.getByTestId('vp-present-button'));
+    fireEvent.click(screen.getByTestId('apply-filter-button'));
+    fireEvent.click(screen.getByTestId('btnExport'));
+    // This should eventually trigger metric download loading message
+    expect(screen.getByText(/Metric data downloading/)).toBeInTheDocument();
+  });
+});
