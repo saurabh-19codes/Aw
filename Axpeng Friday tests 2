@@ -1,0 +1,93 @@
+it('calls exportToCSV with the export API data when user clicks Export, and handles empty and populated data', async () => {
+  // Step 1: Mock useFetche for filters API (for rendering table)
+  // Step 2: Mock useFetche for download API (for export action)
+  const mockRun = jest.fn();
+
+  // This tracks which call is for export and which for filter
+  let isDownload = false;
+  require('fetche').useFetche.mockImplementation((url, options) => {
+    if (url.includes('enterpriseDownloadData')) {
+      isDownload = true;
+      return {
+        isLoading: false,
+        data: { body: [mockEnterpriseAnnualViewFilter.body] }, // Use export shape
+        run: mockRun,
+      };
+    } else {
+      return {
+        isLoading: false,
+        data: mockEnterpriseAnnualViewFilter, // Use grid/filter data shape
+        run: mockRun,
+      };
+    }
+  });
+
+  render(<AxpEngineeringMetricsGridWithFiltersTest isMonthlyToggle={true} />);
+  // Simulate VP present and filter applied to enable export
+  fireEvent.click(screen.getByTestId('vp-present-button'));
+  fireEvent.click(screen.getByTestId('apply-filter-button'));
+  // The export button should now be enabled
+  const exportBtn = screen.getByTestId('btnExport');
+  fireEvent.click(exportBtn);
+
+  // Wait for the exportToCSV to be called (should be called with download API's response)
+  await waitFor(() => {
+    expect(mockExportToCSV).toHaveBeenCalledWith(
+      [mockEnterpriseAnnualViewFilter.body], // This should match export API shape
+      'export_count'
+    );
+  });
+
+  // Now test empty body scenario for export (edge case)
+  require('fetche').useFetche.mockImplementation((url, options) => {
+    if (url.includes('enterpriseDownloadData')) {
+      return {
+        isLoading: false,
+        data: { body: [] },
+        run: mockRun,
+      };
+    } else {
+      return {
+        isLoading: false,
+        data: mockEnterpriseAnnualViewFilter,
+        run: mockRun,
+      };
+    }
+  });
+
+  render(<AxpEngineeringMetricsGridWithFiltersTest isMonthlyToggle={true} />);
+  fireEvent.click(screen.getByTestId('vp-present-button'));
+  fireEvent.click(screen.getByTestId('apply-filter-button'));
+  fireEvent.click(screen.getByTestId('btnExport'));
+
+  await waitFor(() => {
+    expect(mockExportToCSV).toHaveBeenCalledWith(
+      [{}], // For empty case
+      'export_count'
+    );
+  });
+});
+
+
+
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import AxpEngineeringMetricsGridWithFiltersTest from '../AxpEngineeringMetricsGridWithFiltersTest';
+// Import your correct mocks
+import { mockEnterpriseAnnualViewFilter } from '../mockData'; // Adjust path as needed
+
+const mockExportToCSV = jest.fn();
+
+// Mock util and hooks
+jest.mock('../util/enterpriseHelper', () => ({
+  exportToCSV: (data, ...args) => mockExportToCSV(data, ...args),
+}));
+
+jest.mock('fetche', () => ({
+  useFetche: jest.fn(),
+}));
+
+// Helper to reset mocks before each test
+beforeEach(() => {
+  jest.clearAllMocks();
+});
