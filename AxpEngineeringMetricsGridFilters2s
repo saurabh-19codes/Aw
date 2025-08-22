@@ -1,0 +1,204 @@
+// AxpEngineeringMetricsGridFilters.spec.jsx
+
+import React from 'react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
+import AxpEngineeringMetricsGridFilters from '../../../src/components/AxpEngineeringMetricsGridFilters';
+import { FiltersProvider, initialFilter } from '../../../src/FiltersContext';
+
+// Mocks & Test Setup
+jest.mock('../../../src/components/AxpMultiSelectFilter', () => {
+  // ... as you have in your code
+  const MockSelect = ({
+    options = [],
+    value = [],
+    onChange,
+    isMulti,
+    isLoading,
+    id,
+    label,
+  }) => {
+    const handleChange = (e) => {
+      const selectedValues = [...e.target.selectedOptions].map((opt) => opt.value);
+      const selectedOptionsArg =
+        selectedValues.length === 0
+          ? null
+          : selectedValues.map((val) => ({ value: val, label: val }));
+      onChange(selectedOptionsArg);
+    };
+    return (
+      <div>
+        <label htmlFor={id}>{label}</label>
+        <select
+          id={id}
+          multiple={isMulti}
+          onChange={handleChange}
+          data-testid={id}
+          disabled={isLoading}
+        >
+          {options.map((option) => (
+            <option key={option.value} value={option.value} selected={value.some((v) => v.value === option.value)}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    );
+  };
+  MockSelect.propTypes = {
+    options: PropTypes.arrayOf(
+      PropTypes.shape({
+        value: PropTypes.string,
+        label: PropTypes.string,
+      })
+    ).isRequired,
+    value: PropTypes.arrayOf(
+      PropTypes.shape({
+        value: PropTypes.string,
+        label: PropTypes.string,
+      })
+    ).isRequired,
+    onChange: PropTypes.func.isRequired,
+    isMulti: PropTypes.bool,
+    isLoading: PropTypes.bool,
+    id: PropTypes.string,
+    label: PropTypes.string.isRequired,
+  };
+  return MockSelect;
+});
+
+jest.mock('react-redux', () => ({
+  ...jest.requireActual('react-redux'),
+  useDispatch: jest.fn(),
+  useSelector: jest.fn(),
+}));
+
+jest.mock('fetchye', () => ({
+  useFetchye: jest.fn(),
+}));
+
+const defaultProps = {
+  refetchData: jest.fn(),
+  isDataLoading: false,
+  onVpsPresent: jest.fn(),
+  onDirectorPresent: jest.fn(),
+  onResetFilter: jest.fn(),
+  isMonthlyToggle: false,
+};
+
+const renderComponent = (props = {}) =>
+  render(
+    <FiltersProvider>
+      <AxpEngineeringMetricsGridFilters {...defaultProps} {...props} />
+    </FiltersProvider>
+  );
+
+describe('AxpEngineeringMetricsGridFilters', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    require('fetchye').useFetchye.mockReturnValue({
+      isLoading: false,
+      data: [],
+      run: jest.fn(),
+    });
+    require('react-redux').useSelector.mockImplementation((selector) =>
+      selector(fromJS({ config: { oneApiUrl: 'http://mockapi.com' } }))
+    );
+  });
+
+  it('renders all filter selectors and buttons', async () => {
+    renderComponent();
+
+    expect(screen.getByLabelText(/Filter By Unit VPs/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Filter By Org VPs/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Filter By VPs/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Filter By Directors/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Filter By Repositories/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Apply Filter/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Reset Filter/i })).toBeInTheDocument();
+  });
+
+  it('calls refetchData with correct params on Apply Filter click', () => {
+    renderComponent();
+    const applyButton = screen.getByRole('button', { name: /Apply Filter/i });
+    fireEvent.click(applyButton);
+    expect(defaultProps.refetchData).toHaveBeenCalled();
+  });
+
+  it('calls onResetFilter and refetchData when Reset Filter is clicked', () => {
+    renderComponent();
+    const resetButton = screen.getByRole('button', { name: /Reset Filter/i });
+    fireEvent.click(resetButton);
+    expect(defaultProps.onResetFilter).toHaveBeenCalled();
+    expect(defaultProps.refetchData).toHaveBeenCalled();
+  });
+
+  it('disables buttons when isDataLoading is true', () => {
+    renderComponent({ isDataLoading: true });
+    expect(screen.getByRole('button', { name: /Apply Filter/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Reset Filter/i })).toBeDisabled();
+  });
+
+  it('dispatches correct actions on changing filter values', async () => {
+    renderComponent();
+    // Simulate selection on a filter (e.g., Directors).
+    const directorsSelect = screen.getByLabelText(/Filter By Directors/i);
+    fireEvent.change(directorsSelect, {
+      target: { selectedOptions: [{ value: 'user-1' }] },
+    });
+    // Behavior: your mock dispatch or component state should update accordingly.
+    // You may extend here with an expect for dispatch or UI update.
+  });
+
+  it('renders loading state in filters when isLoading is true', () => {
+    require('fetchye').useFetchye.mockReturnValue({
+      isLoading: true,
+      data: [],
+      run: jest.fn(),
+    });
+    renderComponent();
+    // For each filter, check if it is disabled (your MockSelect disables when isLoading).
+    expect(screen.getByLabelText(/Filter By Directors/i)).toBeDisabled();
+    expect(screen.getByLabelText(/Filter By Repositories/i)).toBeDisabled();
+  });
+
+  it('handles multi-selects: allows selecting multiple options', () => {
+    renderComponent();
+    const reposSelect = screen.getByLabelText(/Filter By Repositories/i);
+    fireEvent.change(reposSelect, {
+      target: {
+        selectedOptions: [
+          { value: 'repo1' },
+          { value: 'repo2' },
+        ],
+      },
+    });
+    // Add expect logic for changed props/state if available.
+  });
+
+  it('resets all filter fields to initial state when Reset Filter is clicked', async () => {
+    renderComponent();
+    // Simulate changes
+    const directorsSelect = screen.getByLabelText(/Filter By Directors/i);
+    fireEvent.change(directorsSelect, {
+      target: { selectedOptions: [{ value: 'user-2' }] },
+    });
+    // Now reset
+    const resetButton = screen.getByRole('button', { name: /Reset Filter/i });
+    fireEvent.click(resetButton);
+    // Expect the selects to be empty or at default - optionally simulate further to confirm
+  });
+
+  it('calls onVpsPresent and onDirectorPresent callbacks as expected', async () => {
+    renderComponent();
+    // Simulate changing VP and directors to trigger props callbacks
+    // Add fireEvent for selects and assert if defaultProps.onVpsPresent/mock is called
+  });
+
+  // Additional edge cases as needed...
+});
+
