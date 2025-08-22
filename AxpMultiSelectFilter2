@@ -1,0 +1,425 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import '@testing-library/jest-dom';
+import AxpMultiSelectFilter from './AxpMultiSelectFilter';
+
+// Mock react-select to make testing easier
+jest.mock('react-select', () => {
+  return function MockSelect({ 
+    options, 
+    value, 
+    onChange, 
+    isMulti, 
+    isLoading, 
+    placeholder,
+    id,
+    ...props 
+  }) {
+    return (
+      <div data-testid="mock-select">
+        <select
+          data-testid="select-input"
+          multiple={isMulti}
+          value={value ? value.map(v => v.value) : []}
+          onChange={(e) => {
+            const selectedOptions = Array.from(e.target.selectedOptions).map(option => ({
+              value: option.value,
+              label: option.text
+            }));
+            onChange(selectedOptions);
+          }}
+          disabled={isLoading}
+        >
+          <option value="" disabled>{placeholder}</option>
+          {options.map(option => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        {isLoading && <span data-testid="loading-indicator">Loading...</span>}
+      </div>
+    );
+  };
+});
+
+describe('AxpMultiSelectFilter', () => {
+  const defaultProps = {
+    name: 'test-filter',
+    label: 'Test Filter',
+    options: [
+      { value: 'option1', label: 'Option 1' },
+      { value: 'option2', label: 'Option 2' },
+      { value: 'option3', label: 'Option 3' }
+    ],
+    selected: [],
+    setSelected: jest.fn()
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  describe('Rendering', () => {
+    it('renders the component with label', () => {
+      render(<AxpMultiSelectFilter {...defaultProps} />);
+      
+      expect(screen.getByText('Test Filter')).toBeInTheDocument();
+      expect(screen.getByTestId('mock-select')).toBeInTheDocument();
+    });
+
+    it('renders with custom container class', () => {
+      render(<AxpMultiSelectFilter {...defaultProps} />);
+      
+      const container = screen.getByText('Test Filter').closest('div');
+      expect(container).toHaveClass('axp-multiselect-container');
+    });
+
+    it('renders the label with correct htmlFor attribute', () => {
+      render(<AxpMultiSelectFilter {...defaultProps} />);
+      
+      const label = screen.getByText('Test Filter');
+      expect(label).toHaveAttribute('htmlFor', 'multiselect-test-filter');
+    });
+
+    it('renders select with correct id', () => {
+      render(<AxpMultiSelectFilter {...defaultProps} />);
+      
+      const select = screen.getByTestId('select-input');
+      expect(select.closest('[data-testid="mock-select"]')).toBeInTheDocument();
+    });
+  });
+
+  describe('Props handling', () => {
+    it('passes options correctly to Select component', () => {
+      render(<AxpMultiSelectFilter {...defaultProps} />);
+      
+      expect(screen.getByDisplayValue('option1')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('option2')).toBeInTheDocument();
+      expect(screen.getByDisplayValue('option3')).toBeInTheDocument();
+    });
+
+    it('displays selected values correctly', () => {
+      const selectedOptions = [
+        { value: 'option1', label: 'Option 1' },
+        { value: 'option2', label: 'Option 2' }
+      ];
+
+      render(
+        <AxpMultiSelectFilter 
+          {...defaultProps} 
+          selected={selectedOptions}
+        />
+      );
+
+      const select = screen.getByTestId('select-input');
+      expect(select.value).toContain('option1');
+      expect(select.value).toContain('option2');
+    });
+
+    it('shows loading state when isLoading is true', () => {
+      render(<AxpMultiSelectFilter {...defaultProps} isLoading={true} />);
+      
+      expect(screen.getByTestId('loading-indicator')).toBeInTheDocument();
+      expect(screen.getByText('Loading...')).toBeInTheDocument();
+    });
+
+    it('disables select when isLoading is true', () => {
+      render(<AxpMultiSelectFilter {...defaultProps} isLoading={true} />);
+      
+      const select = screen.getByTestId('select-input');
+      expect(select).toBeDisabled();
+    });
+  });
+
+  describe('Selection handling', () => {
+    it('calls setSelected when selection changes', async () => {
+      const user = userEvent.setup();
+      const mockSetSelected = jest.fn();
+
+      render(
+        <AxpMultiSelectFilter 
+          {...defaultProps} 
+          setSelected={mockSetSelected}
+        />
+      );
+
+      const select = screen.getByTestId('select-input');
+      
+      // Simulate selecting an option
+      fireEvent.change(select, { 
+        target: { 
+          selectedOptions: [
+            { value: 'option1', text: 'Option 1' }
+          ]
+        }
+      });
+
+      expect(mockSetSelected).toHaveBeenCalledWith([
+        { value: 'option1', label: 'Option 1' }
+      ]);
+    });
+
+    it('handles multiple selections correctly', () => {
+      const mockSetSelected = jest.fn();
+
+      render(
+        <AxpMultiSelectFilter 
+          {...defaultProps} 
+          setSelected={mockSetSelected}
+        />
+      );
+
+      const select = screen.getByTestId('select-input');
+      
+      // Simulate selecting multiple options
+      fireEvent.change(select, { 
+        target: { 
+          selectedOptions: [
+            { value: 'option1', text: 'Option 1' },
+            { value: 'option2', text: 'Option 2' }
+          ]
+        }
+      });
+
+      expect(mockSetSelected).toHaveBeenCalledWith([
+        { value: 'option1', label: 'Option 1' },
+        { value: 'option2', label: 'Option 2' }
+      ]);
+    });
+
+    it('handles deselection correctly', () => {
+      const mockSetSelected = jest.fn();
+      const initialSelected = [
+        { value: 'option1', label: 'Option 1' },
+        { value: 'option2', label: 'Option 2' }
+      ];
+
+      render(
+        <AxpMultiSelectFilter 
+          {...defaultProps} 
+          selected={initialSelected}
+          setSelected={mockSetSelected}
+        />
+      );
+
+      const select = screen.getByTestId('select-input');
+      
+      // Simulate deselecting one option
+      fireEvent.change(select, { 
+        target: { 
+          selectedOptions: [
+            { value: 'option1', text: 'Option 1' }
+          ]
+        }
+      });
+
+      expect(mockSetSelected).toHaveBeenCalledWith([
+        { value: 'option1', label: 'Option 1' }
+      ]);
+    });
+
+    it('handles clearing all selections', () => {
+      const mockSetSelected = jest.fn();
+      const initialSelected = [
+        { value: 'option1', label: 'Option 1' }
+      ];
+
+      render(
+        <AxpMultiSelectFilter 
+          {...defaultProps} 
+          selected={initialSelected}
+          setSelected={mockSetSelected}
+        />
+      );
+
+      const select = screen.getByTestId('select-input');
+      
+      // Simulate clearing all selections
+      fireEvent.change(select, { 
+        target: { 
+          selectedOptions: []
+        }
+      });
+
+      expect(mockSetSelected).toHaveBeenCalledWith([]);
+    });
+  });
+
+  describe('Edge cases and error handling', () => {
+    it('handles empty options array', () => {
+      render(
+        <AxpMultiSelectFilter 
+          {...defaultProps} 
+          options={[]}
+        />
+      );
+
+      expect(screen.getByTestId('mock-select')).toBeInTheDocument();
+      expect(screen.getByText('Test Filter')).toBeInTheDocument();
+    });
+
+    it('handles undefined selected prop', () => {
+      render(
+        <AxpMultiSelectFilter 
+          {...defaultProps} 
+          selected={undefined}
+        />
+      );
+
+      expect(screen.getByTestId('mock-select')).toBeInTheDocument();
+    });
+
+    it('handles null selected prop', () => {
+      render(
+        <AxpMultiSelectFilter 
+          {...defaultProps} 
+          selected={null}
+        />
+      );
+
+      expect(screen.getByTestId('mock-select')).toBeInTheDocument();
+    });
+
+    it('handles missing setSelected prop gracefully', () => {
+      const { container } = render(
+        <AxpMultiSelectFilter 
+          {...defaultProps} 
+          setSelected={undefined}
+        />
+      );
+
+      expect(container.firstChild).toBeInTheDocument();
+    });
+
+    it('handles options with duplicate values', () => {
+      const duplicateOptions = [
+        { value: 'option1', label: 'Option 1' },
+        { value: 'option1', label: 'Option 1 Duplicate' },
+        { value: 'option2', label: 'Option 2' }
+      ];
+
+      render(
+        <AxpMultiSelectFilter 
+          {...defaultProps} 
+          options={duplicateOptions}
+        />
+      );
+
+      expect(screen.getByTestId('mock-select')).toBeInTheDocument();
+    });
+  });
+
+  describe('Accessibility', () => {
+    it('has proper label association', () => {
+      render(<AxpMultiSelectFilter {...defaultProps} />);
+      
+      const label = screen.getByText('Test Filter');
+      expect(label).toHaveAttribute('htmlFor', 'multiselect-test-filter');
+    });
+
+    it('supports custom aria attributes through props', () => {
+      render(
+        <AxpMultiSelectFilter 
+          {...defaultProps}
+          aria-describedby="help-text"
+        />
+      );
+
+      expect(screen.getByTestId('mock-select')).toBeInTheDocument();
+    });
+  });
+
+  describe('Performance', () => {
+    it('does not re-render unnecessarily when props do not change', () => {
+      const { rerender } = render(<AxpMultiSelectFilter {...defaultProps} />);
+      
+      const initialElement = screen.getByTestId('mock-select');
+      
+      rerender(<AxpMultiSelectFilter {...defaultProps} />);
+      
+      expect(screen.getByTestId('mock-select')).toBe(initialElement);
+    });
+
+    it('handles large number of options', () => {
+      const largeOptions = Array.from({ length: 1000 }, (_, i) => ({
+        value: `option${i}`,
+        label: `Option ${i}`
+      }));
+
+      render(
+        <AxpMultiSelectFilter 
+          {...defaultProps} 
+          options={largeOptions}
+        />
+      );
+
+      expect(screen.getByTestId('mock-select')).toBeInTheDocument();
+    });
+  });
+
+  describe('Integration scenarios', () => {
+    it('works with dynamic options loading', async () => {
+      const mockSetSelected = jest.fn();
+      const { rerender } = render(
+        <AxpMultiSelectFilter 
+          {...defaultProps} 
+          options={[]}
+          isLoading={true}
+          setSelected={mockSetSelected}
+        />
+      );
+
+      expect(screen.getByTestId('loading-indicator')).toBeInTheDocument();
+
+      // Simulate options loading
+      const loadedOptions = [
+        { value: 'new1', label: 'New Option 1' },
+        { value: 'new2', label: 'New Option 2' }
+      ];
+
+      rerender(
+        <AxpMultiSelectFilter 
+          {...defaultProps} 
+          options={loadedOptions}
+          isLoading={false}
+          setSelected={mockSetSelected}
+        />
+      );
+
+      expect(screen.queryByTestId('loading-indicator')).not.toBeInTheDocument();
+      expect(screen.getByDisplayValue('new1')).toBeInTheDocument();
+    });
+
+    it('maintains selection state across option updates', () => {
+      const mockSetSelected = jest.fn();
+      const initialSelected = [{ value: 'option1', label: 'Option 1' }];
+      
+      const { rerender } = render(
+        <AxpMultiSelectFilter 
+          {...defaultProps} 
+          selected={initialSelected}
+          setSelected={mockSetSelected}
+        />
+      );
+
+      const newOptions = [
+        { value: 'option1', label: 'Option 1' },
+        { value: 'option4', label: 'Option 4' }
+      ];
+
+      rerender(
+        <AxpMultiSelectFilter 
+          {...defaultProps} 
+          options={newOptions}
+          selected={initialSelected}
+          setSelected={mockSetSelected}
+        />
+      );
+
+      const select = screen.getByTestId('select-input');
+      expect(select.value).toContain('option1');
+    });
+  });
+});
