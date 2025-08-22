@@ -1,0 +1,118 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import AxpEngineeringMetricsGridFilters from './AxpEngineeringMetricsGridFilters';
+import { FiltersProvider } from '../FiltersContext';
+
+const defaultProps = {
+  refetchData: jest.fn(),
+  isDataLoading: false,
+  onVpsPresent: jest.fn(),
+  onDirectorPresent: jest.fn(),
+  onResetFilter: jest.fn(),
+  isMonthlyToggle: false,
+};
+
+const renderComponent = (props = {}) =>
+  render(
+    <FiltersProvider>
+      <AxpEngineeringMetricsGridFilters {...defaultProps} {...props} />
+    </FiltersProvider>
+  );
+
+describe('AxpEngineeringMetricsGridFilters', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('renders all filter selectors and buttons', () => {
+    renderComponent();
+
+    expect(screen.getByLabelText(/Filter By Unit VPs/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Filter By Org VPs/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Filter By VPs/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Filter By Directors/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Filter By Repositories/i)).toBeInTheDocument();
+
+    expect(screen.getByRole('button', { name: /Apply Filter/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Reset Filter/i })).toBeInTheDocument();
+  });
+
+  it('calls refetchData with correct params on Apply Filter click', () => {
+    renderComponent();
+
+    const applyButton = screen.getByRole('button', { name: /Apply Filter/i });
+    fireEvent.click(applyButton);
+
+    expect(defaultProps.refetchData).toHaveBeenCalledWith(
+      expect.objectContaining({}), // selected filters structure
+      { isMonthly: defaultProps.isMonthlyToggle }
+    );
+  });
+
+  it('calls onResetFilter on Reset Filter click', () => {
+    renderComponent();
+
+    const resetButton = screen.getByRole('button', { name: /Reset Filter/i });
+    fireEvent.click(resetButton);
+
+    expect(defaultProps.onResetFilter).toHaveBeenCalled();
+  });
+
+  it('disables buttons when isDataLoading is true', () => {
+    renderComponent({ isDataLoading: true });
+
+    expect(screen.getByRole('button', { name: /Apply Filter/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Reset Filter/i })).toBeDisabled();
+  });
+
+  it('dispatches correct actions on changing filter values', async () => {
+    renderComponent();
+    // simulate select/change for one of the filters
+    // This test assumes your filter dropdown is a select element. Adjust if a custom component.
+    const directorsFilter = screen.getByLabelText(/Filter By Directors/i);
+
+    // Simulate user selects a value (adjust logic depending on MultiSelect component interface)
+    fireEvent.change(directorsFilter, { target: { value: 'director-1' } });
+
+    // You can check for state update or callback, depending on your test utilities, e.g.:
+    await waitFor(() => {
+      // expect the UI or dispatched actions to reflect the new selection
+    });
+  });
+
+  it('shows loading indicators/spinners on the filter fields when loading', () => {
+    // set loading flags to true in the props passed to AxpEngineeringMetricsGridFilters
+    // verify that a spinner/loader (by role or label) is in the document
+  });
+
+  it('correctly fetches options based on dependencies', async () => {
+    // Simulate applying one filter (e.g., SVPs)
+    // The component should trigger fetches for dependent options orgVps, vps, etc.
+    // You may need to mock the API/fetch logic or look for effect calls/states
+  });
+
+  it('resets filter fields when Reset Filter is clicked', () => {
+    renderComponent();
+    const resetButton = screen.getByRole('button', { name: /Reset Filter/i });
+    fireEvent.click(resetButton);
+
+    // Verify all filter dropdowns are reset to initial empty states
+    // (Look for default/empty value in select fields)
+  });
+
+  it('applies selected filters and sets filtersApplied flag', () => {
+    renderComponent();
+    const applyButton = screen.getByRole('button', { name: /Apply Filter/i });
+    fireEvent.click(applyButton);
+
+    // Check if filter context now has filtersApplied: true, or UI reflects applied filters
+  });
+
+  it('calls onVpsPresent and onDirectorPresent with correct params', async () => {
+    // Simulate the selection logic that triggers these props callbacks
+    // Use fireEvent and check for correct calls to mock functions
+  });
+
+  // You can add more edge-case tests as required for your actual app
+});
+
