@@ -1,3 +1,30 @@
+// Mock react-select
+jest.mock("react-select", () => ({ options, value, onChange, isMulti, isLoading }) => {
+  return (
+    <select
+      data-testid="mock-select"
+      multiple={isMulti}
+      disabled={isLoading}
+      value={value.map((v) => v.value)}
+      onChange={(e) => {
+        // Convert event target.value into [{ value, label }]
+        const selectedValues = Array.from(e.target.selectedOptions).map((o) => ({
+          value: o.value,
+          label: o.value,
+        }));
+        onChange(selectedValues);
+      }}
+    >
+      {options.map((opt) => (
+        <option key={opt.value} value={opt.value}>
+          {opt.label}
+        </option>
+      ))}
+    </select>
+  );
+});
+
+
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
 import Select from "react-select";
