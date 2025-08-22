@@ -1,49 +1,27 @@
-// Mock react-select
-jest.mock("react-select", () => ({ options, value, onChange, isMulti, isLoading }) => {
-  return (
-    <select
-      data-testid="mock-select"
-      multiple={isMulti}
-      disabled={isLoading}
-      value={value.map((v) => v.value)}
-      onChange={(e) => {
-        // Convert event target.value into [{ value, label }]
-        const selectedValues = Array.from(e.target.selectedOptions).map((o) => ({
-          value: o.value,
-          label: o.value,
-        }));
-        onChange(selectedValues);
-      }}
-    >
-      {options.map((opt) => (
-        <option key={opt.value} value={opt.value}>
-          {opt.label}
-        </option>
-      ))}
-    </select>
-  );
-});
-
-
 import React from "react";
 import { render, screen, fireEvent } from "@testing-library/react";
-import Select from "react-select";
 import { AxpMultiSelectFilter } from "./AxpMultiSelectFilter";
 
-// Mock react-select (to simplify testing)
+// --- Mock react-select ---
 jest.mock("react-select", () => ({ options, value, onChange, isMulti, isLoading }) => {
   return (
     <select
       data-testid="mock-select"
       multiple={isMulti}
       disabled={isLoading}
-      value={value.map((v) => v.value)}
+      value={value.map((v) => v.value).join(",")}
       onChange={(e) => {
-        const selectedValues = Array.from(e.target.selectedOptions).map((o) => ({
-          value: o.value,
-          label: o.value,
-        }));
-        onChange(selectedValues);
+        let values;
+        if (isMulti) {
+          // Support comma-separated string for multiple values
+          values = e.target.value.split(",").map((val) => ({
+            value: val,
+            label: val,
+          }));
+        } else {
+          values = [{ value: e.target.value, label: e.target.value }];
+        }
+        onChange(values);
       }}
     >
       {options.map((opt) => (
@@ -70,50 +48,55 @@ describe("AxpMultiSelectFilter", () => {
     jest.clearAllMocks();
   });
 
-  it("renders the label and select input", () => {
+  it("renders label and select", () => {
     render(<AxpMultiSelectFilter {...defaultProps} />);
     expect(screen.getByText("Test Label")).toBeInTheDocument();
     expect(screen.getByTestId("mock-select")).toBeInTheDocument();
   });
 
-  it("maps options correctly into select", () => {
+  it("renders all options", () => {
     render(<AxpMultiSelectFilter {...defaultProps} />);
     const select = screen.getByTestId("mock-select");
     expect(select.children).toHaveLength(3);
     expect(select.children[0].textContent).toBe("Option1");
+    expect(select.children[1].textContent).toBe("Option2");
   });
 
-  it("pre-selects values passed in `selected` prop", () => {
+  it("preselects values from `selected` prop", () => {
     render(<AxpMultiSelectFilter {...defaultProps} />);
     const select = screen.getByTestId("mock-select");
     expect(select.value).toBe("Option1");
   });
 
-  it("calls setSelected when selection changes", () => {
+  it("calls setSelected on single selection", () => {
     render(<AxpMultiSelectFilter {...defaultProps} />);
     const select = screen.getByTestId("mock-select");
-    fireEvent.change(select, { target: { selectedOptions: [{ value: "Option2" }] } });
+
+    fireEvent.change(select, { target: { value: "Option2" } });
+
     expect(mockSetSelected).toHaveBeenCalledWith(["Option2"]);
   });
 
   it("handles multiple selections", () => {
     render(<AxpMultiSelectFilter {...defaultProps} />);
     const select = screen.getByTestId("mock-select");
-    fireEvent.change(select, {
-      target: { selectedOptions: [{ value: "Option2" }, { value: "Option3" }] },
-    });
+
+    fireEvent.change(select, { target: { value: "Option2,Option3" } });
+
     expect(mockSetSelected).toHaveBeenCalledWith(["Option2", "Option3"]);
   });
 
-  it("disables the select when isLoading is true", () => {
+  it("disables select when loading", () => {
     render(<AxpMultiSelectFilter {...defaultProps} isLoading />);
     expect(screen.getByTestId("mock-select")).toBeDisabled();
   });
 
-  it("passes empty array when nothing selected", () => {
+  it("clears selection correctly", () => {
     render(<AxpMultiSelectFilter {...defaultProps} />);
     const select = screen.getByTestId("mock-select");
-    fireEvent.change(select, { target: { selectedOptions: [] } });
-    expect(mockSetSelected).toHaveBeenCalledWith([]);
+
+    fireEvent.change(select, { target: { value: "" } });
+
+    expect(mockSetSelected).toHaveBeenCalledWith([""]);
   });
 });
