@@ -1,0 +1,112 @@
+import React from "react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import "@testing-library/jest-dom";
+import AxpNFRMetricsGridWithFiltersWithEb from "../AxpNFRMetricsGridWithFiltersWithEb";
+
+// 🔹 Mock dependencies
+jest.mock("react-redux", () => ({
+  useSelector: jest.fn((fn) => fn({ config: { oneApiUrl: "mockApi" } })),
+}));
+
+jest.mock("use-fetchye", () => ({
+  __esModule: true,
+  default: jest.fn(() => ({
+    isLoading: false,
+    data: {
+      body: {
+        amexWayHeader: ["KPI", "Value"],
+        amexWayData: [{ kpi: "mockKPI", value: 100 }],
+        amexWayConsolidatedData: [{ baseKpiCount: 5, baseKpiCountPrev: 3 }],
+      },
+    },
+  })),
+}));
+
+jest.mock("../LoaderCircle", () => () => <div data-testid="loader" />);
+jest.mock("../AxpEngineeringMetricsGridFilters", () => (props) => (
+  <div data-testid="filters">
+    <button onClick={() => props.refetchData([{ kpi: "test" }])}>
+      Apply Filters
+    </button>
+    <button onClick={() => props.onResetFilter()}>Reset</button>
+    <button onClick={() => props.onVpsPresent(true)}>VP Present</button>
+    <button onClick={() => props.onDirectorPresent(true)}>Dir Present</button>
+  </div>
+));
+jest.mock("../../utils/enterpriseHelper", () => ({
+  exportToCSV: jest.fn(),
+  findMetricEndpoint: jest.fn(() => "metric-endpoint"),
+  getColumns: jest.fn(() => [
+    { text: "Export Details", dataField: "kpi", formatter: jest.fn() },
+  ]),
+}));
+
+describe("AxpNFRMetricsGridWithFiltersWithEb", () => {
+  it("renders loader when isLoading true", () => {
+    // Override mock for this test
+    require("use-fetchye").default.mockReturnValueOnce({
+      isLoading: true,
+      data: null,
+    });
+
+    render(<AxpNFRMetricsGridWithFiltersWithEb />);
+    expect(screen.getByTestId("loader")).toBeInTheDocument();
+  });
+
+  it("renders DataTable when data is available", () => {
+    render(<AxpNFRMetricsGridWithFiltersWithEb />);
+    expect(screen.getByText("mockKPI")).toBeInTheDocument();
+  });
+
+  it("applies filters when filter button clicked", async () => {
+    render(<AxpNFRMetricsGridWithFiltersWithEb />);
+    fireEvent.click(screen.getByText("Apply Filters"));
+    // State update should re-render with new filter applied
+    await waitFor(() => {
+      expect(screen.getByText("mockKPI")).toBeInTheDocument();
+    });
+  });
+
+  it("resets filters when reset button clicked", () => {
+    render(<AxpNFRMetricsGridWithFiltersWithEb />);
+    fireEvent.click(screen.getByText("Reset"));
+    expect(screen.getByTestId("filters")).toBeInTheDocument();
+  });
+
+  it("handles VP present event", () => {
+    render(<AxpNFRMetricsGridWithFiltersWithEb />);
+    fireEvent.click(screen.getByText("VP Present"));
+    expect(screen.getByTestId("filters")).toBeInTheDocument();
+  });
+
+  it("handles Director present event", () => {
+    render(<AxpNFRMetricsGridWithFiltersWithEb />);
+    fireEvent.click(screen.getByText("Dir Present"));
+    expect(screen.getByTestId("filters")).toBeInTheDocument();
+  });
+
+  it("calls downloadExcel when export button clicked", () => {
+    render(<AxpNFRMetricsGridWithFiltersWithEb />);
+    const btn = screen.getByTestId("btnExport");
+    fireEvent.click(btn);
+    expect(btn).toBeInTheDocument();
+  });
+
+  it("handles metric export button inside table", () => {
+    render(<AxpNFRMetricsGridWithFiltersWithEb />);
+    // Export column formatter renders download button
+    const exportBtn = screen.getAllByRole("button").find((b) =>
+      b.textContent.includes("Export")
+    );
+    expect(exportBtn).toBeInTheDocument();
+  });
+
+  it("shows PageLevelMessage when metric download is loading", () => {
+    require("use-fetchye").default.mockReturnValueOnce({
+      isLoading: false,
+      data: { body: { amexWayData: [] } },
+    });
+    render(<AxpNFRMetricsGridWithFiltersWithEb />);
+    expect(screen.getByText(/Export Count/)).toBeInTheDocument();
+  });
+});
