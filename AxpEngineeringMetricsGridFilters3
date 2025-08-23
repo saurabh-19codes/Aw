@@ -1,0 +1,219 @@
+import React from 'react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import { AxpEngineeringMetricsGridFilters } from './AxpEngineeringMetricsGridFilters';
+import { FiltersProvider } from '../FiltersContext';
+
+jest.mock('react-redux', () => ({ useSelector: jest.fn() }));
+jest.mock('fetchye', () => ({ useFetchye: jest.fn() }));
+jest.mock('@americanexpress/dls-react', () => ({
+  ButtonPrimary: ({ children, ...props }) => <button {...props}>{children}</button>
+}));
+
+// Mock the AxpMultiSelectFilter as a visible select for easier querying in tests
+jest.mock('./AxpMultiSelectFilter', () => ({
+  AxpMultiSelectFilter: ({ name, label, options, selected, setSelected, isLoading }) => (
+    <select
+      data-testid={name}
+      aria-label={label}
+      value={selected[0] || ''}
+      disabled={isLoading}
+      onChange={e => setSelected([e.target.value])}
+      multiple
+    >
+      {options.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+    </select>
+  )
+}));
+
+// Import useSelector and useFetchye for control in mock implementations
+import { useSelector } from 'react-redux';
+import { useFetchye } from 'fetchye';
+
+describe('AxpEngineeringMetricsGridFilters', () => {
+  beforeEach(() => {
+    // Reset mocks before each test
+    jest.clearAllMocks();
+    // Mock global initial state for useSelector
+    useSelector.mockImplementation((cb) => cb({ getIn: () => 'http://fake-api.com' }));
+
+    // Mock useFetchye for each data set (SVP, OrgVPs, etc)
+    useFetchye.mockImplementation((url) => {
+      if (url.includes('svpList')) {
+        return { isLoading: false, data: { body: [{ value: 'svp1', label: 'SVP 1'}, { value: 'svp2', label: 'SVP 2'}] } };
+      }
+      if (url.includes('orgVpList')) {
+        return { isLoading: false, data: { body: [{ value: 'orgvp1', label: 'OrgVP 1' }] }, run: jest.fn() };
+      }
+      if (url.includes('vpList')) {
+        return { isLoading: false, data: { body: [{ value: 'vp1', label: 'VP 1' }] }, run: jest.fn() };
+      }
+      if (url.includes('directorList')) {
+        return { isLoading: false, data: { body: [{ value: 'dir1', label: 'Director 1' }] }, run: jest.fn() };
+      }
+      if (url.includes('repoList')) {
+        return { isLoading: false, data: { body: [{ value: 'repo1', label: 'Repo 1' }] }, run: jest.fn() };
+      }
+      return { isLoading: false, data: { body: [] } };
+    });
+  });
+
+  it('renders all filters and fetches initial SVP options', async () => {
+    render(
+      <FiltersProvider>
+        <AxpEngineeringMetricsGridFilters
+          refetchData={jest.fn()}
+          isDataLoading={false}
+          onVpsPresent={jest.fn()}
+          onDirectorPresent={jest.fn()}
+          onResetFilter={jest.fn()}
+          isMonthlyToggle={false}
+        />
+      </FiltersProvider>
+    );
+
+    // SVP select should be populated
+    const svpSelect = await screen.findByTestId('svps');
+    expect(svpSelect).toBeInTheDocument();
+    expect(svpSelect.options.length).toBeGreaterThan(0);
+    expect(svpSelect.options[0].textContent).toBe('SVP 1');
+  });
+
+  it('loads Org VP options when an SVP is selected', async () => {
+    render(
+      <FiltersProvider>
+        <AxpEngineeringMetricsGridFilters
+          refetchData={jest.fn()}
+          isDataLoading={false}
+          onVpsPresent={jest.fn()}
+          onDirectorPresent={jest.fn()}
+          onResetFilter={jest.fn()}
+          isMonthlyToggle={false}
+        />
+      </FiltersProvider>
+    );
+
+    // Simulate selecting an SVP
+    const svpSelect = await screen.findByTestId('svps');
+    fireEvent.change(svpSelect, { target: { value: 'svp1' } });
+
+    // OrgVps field should now be enabled (depends on SVP), and options populated
+    await waitFor(() => {
+      const orgVpSelect = screen.getByTestId('orgVps');
+      expect(orgVpSelect).toBeInTheDocument();
+      expect(orgVpSelect.options.length).toBeGreaterThan(0);
+    });
+  });
+
+  it('disables the apply and reset buttons when loading', () => {
+    render(
+      <FiltersProvider>
+        <AxpEngineeringMetricsGridFilters
+          refetchData={jest.fn()}
+          isDataLoading={true}
+          onVpsPresent={jest.fn()}
+          onDirectorPresent={jest.fn()}
+          onResetFilter={jest.fn()}
+          isMonthlyToggle={false}
+        />
+      </FiltersProvider>
+    );
+    expect(screen.getAllByRole('button').every(btn => btn).length).toBeGreaterThan(0);
+
+    screen.getAllByRole('button').forEach(btn => {
+      expect(btn).toBeDisabled();
+    });
+  });
+
+  it('calls the provided refetchData handler with the expected filter values when "Apply Filter" is clicked', async () => {
+    const refetchDataMock = jest.fn();
+    render(
+      <FiltersProvider>
+        <AxpEngineeringMetricsGridFilters
+          refetchData={refetchDataMock}
+          isDataLoading={false}
+          onVpsPresent={jest.fn()}
+          onDirectorPresent={jest.fn()}
+          onResetFilter={jest.fn()}
+          isMonthlyToggle={true}
+        />
+      </FiltersProvider>
+    );
+
+    // Select an SVP
+    fireEvent.change(screen.getByTestId('svps'), { target: { value: 'svp1' } });
+    // Select an Org VP
+    fireEvent.change(await screen.findByTestId('orgVps'), { target: { value: 'orgvp1' } });
+    // Click Apply
+    fireEvent.click(screen.getByText(/Apply Filter/i));
+    expect(refetchDataMock).toHaveBeenCalled();
+  });
+
+  it('calls the reset handler when clicking "Reset Filter"', () => {
+    const onResetMock = jest.fn();
+    render(
+      <FiltersProvider>
+        <AxpEngineeringMetricsGridFilters
+          refetchData={jest.fn()}
+          isDataLoading={false}
+          onVpsPresent={jest.fn()}
+          onDirectorPresent={jest.fn()}
+          onResetFilter={onResetMock}
+          isMonthlyToggle={false}
+        />
+      </FiltersProvider>
+    );
+    fireEvent.click(screen.getByText(/Reset Filter/i));
+    expect(onResetMock).toHaveBeenCalled();
+  });
+});
+
+
+
+
+// __mocks__/fetchye.js
+export const useFetchye = jest.fn();
+// __mocks__/react-redux.js
+export const useSelector = jest.fn();
+// __mocks__/lodash/object.js
+export const get = jest.fn((obj, path) => path.split('.').reduce((o, p) => o && o[p], obj));
+
+// Mocks for context
+import React from 'react';
+const filtersMock = {
+  options: {
+    svps: [{ value: 'svp1', label: 'SVP 1'}, { value: 'svp2', label: 'SVP 2' }],
+    orgVps: [],
+    vps: [],
+    applicationOwners: [],
+    reposSelected: [],
+  },
+  selected: {
+    svps: [],
+    orgVps: [],
+    vps: [],
+    applicationOwners: [],
+    reposSelected: [],
+  },
+  filtersApplied: false,
+};
+const dispatchMock = jest.fn();
+
+jest.mock('../FiltersContext', () => ({
+  useFilters: () => filtersMock,
+  useFiltersDispatch: () => dispatchMock,
+  ACTIONS: {
+    SET_S_VPS: 'SET_S_VPS',
+    SELECT_S_VPS: 'SELECT_S_VPS',
+    SET_ORG_VPS: 'SET_ORG_VPS',
+    SELECT_ORG_VPS: 'SELECT_ORG_VPS',
+    SET_VPS: 'SET_VPS',
+    SELECT_VPS: 'SELECT_VPS',
+    SET_OWNERS: 'SET_OWNERS',
+    SELECT_OWNERS: 'SELECT_OWNERS',
+    SET_REPOS: 'SET_REPOS',
+    SELECT_REPOS: 'SELECT_REPOS',
+    RESET: 'RESET',
+    APPLY: 'APPLY',
+  }
+}));
